@@ -1,0 +1,23 @@
+models:
+  main: "${LLM_MAIN_MODEL}"
+  reviewer: "${LLM_REVIEWER_MODEL}"
+
+paths:
+  stoic_texts: "./data/stoic_texts"
+  vector_db: "./data/vector_db"
+  sqlite_db: "./data/stoic_emperor.db"
+
+memory:
+  max_context_tokens: 4000
+  embedding_model: "text-embedding-3-small"
+
+rag:
+  chunk_size: 500
+  chunk_overlap: 50
+  similarity_threshold: 0.6
+
+aegean_consensus:
+  enabled: true
+  beta_threshold: 2
+  alpha_quorum: 1.0
+  sessions_between_analysis: 5
