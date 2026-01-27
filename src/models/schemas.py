@@ -42,4 +42,19 @@ class Session(BaseModel):
 
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    email: Optional[str] = None
+    password_hash: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+
+class CondensedSummary(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    level: int
+    content: str
+    period_start: datetime
+    period_end: datetime
+    source_message_count: int
+    source_word_count: int
+    source_summary_ids: List[str] = Field(default_factory=list)
+    consensus_log: Optional[Dict[str, Any]] = None
     created_at: datetime = Field(default_factory=datetime.now)

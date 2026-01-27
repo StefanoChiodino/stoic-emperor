@@ -15,6 +15,8 @@ from src.core.aegean_consensus import AegeanConsensusProtocol, ConsensusResult
 from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
 from src.memory.semantic import SemanticMemory
+from src.memory.condensation import CondensationManager
+from src.memory.context_builder import ContextBuilder
 from src.core.emperor_brain import EmperorBrain
 from src.utils.config import load_config
 
@@ -23,9 +25,12 @@ console = Console()
 DEFAULT_USER_ID = "default_user"
 
 PROFILE_SYNTHESIS_PROMPT = """profile_synthesis: |
-  Based on the following psychological insights gathered from therapy sessions, generate a comprehensive psychological profile.
+  Based on the following condensed conversation summaries and psychological insights, generate a comprehensive psychological profile.
 
-  ## Gathered Insights
+  ## Condensed Conversation History
+  {condensed_history}
+
+  ## Additional Semantic Insights
   {insights}
 
   ## Session Count
@@ -33,11 +38,12 @@ PROFILE_SYNTHESIS_PROMPT = """profile_synthesis: |
 
   ## Instructions
   Create a structured profile including:
-  1. **Core Patterns**: Recurring themes, behaviors, and thought patterns
+  1. **Core Patterns**: Recurring themes, behaviors, and thought patterns (note frequency and intensity from summaries)
   2. **Emotional Landscape**: Predominant emotional states and triggers
   3. **Stoic Assessment**: How well the person embodies Stoic principles
   4. **Growth Areas**: Areas for development and recommended focus
   5. **Strengths**: Identified resilience factors and positive patterns
+  6. **Temporal Trends**: How patterns have evolved over time
 
   Write as Marcus Aurelius would assess a student of Stoicism.
 """
@@ -45,7 +51,7 @@ PROFILE_SYNTHESIS_PROMPT = """profile_synthesis: |
 
 def show_latest_profile(user_id: str) -> bool:
     config = load_config()
-    db = Database(config["paths"]["sqlite_db"])
+    db = Database(config["database"]["url"])
     
     profile = db.get_latest_profile(user_id)
     if not profile:
@@ -82,9 +88,11 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         show_latest_profile(user_id)
         return
     config = load_config()
-    db = Database(config["paths"]["sqlite_db"])
-    vectors = VectorStore(config["paths"]["vector_db"])
+    db = Database(config["database"]["url"])
+    vectors = VectorStore(config["database"]["url"])
     brain = EmperorBrain(config=config)
+    condensation = CondensationManager(db, config)
+    context_builder = ContextBuilder(db, config)
 
     sessions_since = db.count_sessions_since_last_analysis(user_id)
     threshold = config.get("aegean_consensus", {}).get("sessions_between_analysis", 5)
@@ -105,14 +113,39 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
     processed = semantic.process_unprocessed_messages(user_id)
     console.print(f"[green]Processed {processed} messages into semantic memory.[/green]")
 
+    console.print("\n[dim]Condensing conversation history...[/dim]")
+    if condensation.should_condense(user_id):
+        condensation.maybe_condense(user_id, verbose=True)
+    
+    summaries = db.get_condensed_summaries(user_id)
+    condensed_history = ""
+    if summaries:
+        summaries.sort(key=lambda s: s.period_start)
+        condensed_history = "\n\n".join([
+            f"### Period: {s.period_start.strftime('%Y-%m-%d')} to {s.period_end.strftime('%Y-%m-%d')} "
+            f"(Level {s.level}, {s.source_message_count} messages, {s.source_word_count} words)\n{s.content}"
+            for s in summaries
+        ])
+        console.print(f"[green]Found {len(summaries)} condensed summaries.[/green]")
+    else:
+        recent_messages = db.get_recent_messages(user_id, limit=50)
+        if recent_messages:
+            condensed_history = "\n\n".join([
+                f"[{msg.created_at.strftime('%Y-%m-%d %H:%M')}] {msg.role.upper()}: {msg.content}"
+                for msg in recent_messages
+            ])
+            console.print("[yellow]No condensed summaries yet. Using recent messages.[/yellow]")
+        else:
+            console.print("[yellow]No conversation history found.[/yellow]")
+            return
+
     insights = db.get_user_insights(user_id)
-    if not insights:
-        console.print("[yellow]No insights found. Have some conversations first.[/yellow]")
-        return
+    insights_text = ""
+    if insights:
+        insights_text = "\n".join([f"- {i.assertion} (confidence: {i.confidence:.2f})" for i in insights])
+        console.print(f"[dim]Found {len(insights)} semantic insights.[/dim]")
 
-    insights_text = "\n".join([f"- {i.assertion} (confidence: {i.confidence:.2f})" for i in insights])
-
-    console.print(f"\n[dim]Found {len(insights)} insights. Running consensus...[/dim]")
+    console.print(f"\n[dim]Running consensus analysis...[/dim]")
 
     prompts = {"profile_synthesis": PROFILE_SYNTHESIS_PROMPT}
     
@@ -128,9 +161,10 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         result = consensus.reach_consensus(
             prompt_name="profile_synthesis",
             variables={
-                "insights": insights_text,
+                "condensed_history": condensed_history,
+                "insights": insights_text if insights_text else "None",
                 "session_count": sessions_since,
-                "source_data": insights_text
+                "source_data": condensed_history
             },
             critical_constructs=["attachment patterns", "defense mechanisms", "core beliefs"]
         )

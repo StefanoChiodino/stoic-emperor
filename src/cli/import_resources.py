@@ -28,8 +28,8 @@ def import_journaling(
     trigger_analysis: bool = False
 ) -> None:
     config = load_config()
-    db = Database(config["paths"]["sqlite_db"])
-    vectors = VectorStore(config["paths"]["vector_db"])
+    db = Database(config["database"]["url"])
+    vectors = VectorStore(config["database"]["url"])
     brain = EmperorBrain(config=config)
 
     file_path = Path(path)
@@ -130,7 +130,7 @@ def import_stoic_texts(
     tag: bool = True
 ) -> None:
     config = load_config()
-    vectors = VectorStore(config["paths"]["vector_db"])
+    vectors = VectorStore(config["database"]["url"])
     pipeline = IngestionPipeline(vectors, config=config)
 
     file_path = Path(path)

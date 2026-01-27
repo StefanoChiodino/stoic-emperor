@@ -13,13 +13,19 @@ def load_config(config_path: str = "config/settings.yaml") -> Dict[str, Any]:
     load_env()
     
     if not os.path.exists(config_path):
-        # Return default config if file doesn't exist yet
-        return default_config()
-        
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-        
-    return substitute_env_vars(config)
+        config = default_config()
+    else:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        config = substitute_env_vars(config)
+    
+    prompts_path = Path("config/prompts.yaml")
+    if prompts_path.exists():
+        with open(prompts_path, 'r') as f:
+            prompts = yaml.safe_load(f)
+            config["prompts"] = prompts
+    
+    return config
 
 def substitute_env_vars(config: Any) -> Any:
     """Recursively substitute environment variables in config values"""
@@ -39,10 +45,14 @@ def default_config() -> Dict[str, Any]:
             "main": os.getenv("LLM_MAIN_MODEL", "gpt-4o"),
             "reviewer": os.getenv("LLM_REVIEWER_MODEL", "claude-3-5-sonnet"),
         },
+        "database": {
+            "url": os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db"),
+        },
         "paths": {
             "stoic_texts": os.getenv("STOIC_TEXTS_FOLDER", "./data/stoic_texts"),
-            "vector_db": os.getenv("VECTOR_DB_PATH", "./data/vector_db"),
-            "sqlite_db": os.getenv("SQLITE_DB_PATH", "./data/stoic_emperor.db"),
+        },
+        "auth": {
+            "jwt_secret": os.getenv("JWT_SECRET"),
         },
         "memory": {
             "max_context_tokens": 4000,
@@ -58,5 +68,11 @@ def default_config() -> Dict[str, Any]:
             "beta_threshold": 2,
             "alpha_quorum": 1.0,
             "sessions_between_analysis": 5,
+        },
+        "condensation": {
+            "hot_buffer_tokens": 4000,
+            "chunk_threshold_tokens": 8000,
+            "summary_budget_tokens": 12000,
+            "use_consensus": True,
         }
     }

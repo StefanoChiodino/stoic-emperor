@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stoic Emperor</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
     <style>
         * {
             box-sizing: border-box;
@@ -47,8 +48,21 @@
             color: #888;
         }
 
-        .new-session-btn {
-            margin: 16px;
+        .sidebar-section {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-section h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        .analysis-btn {
+            width: 100%;
             padding: 12px 16px;
             background: rgba(201, 162, 39, 0.15);
             border: 1px solid rgba(201, 162, 39, 0.3);
@@ -57,43 +71,85 @@
             cursor: pointer;
             font-size: 0.9rem;
             transition: all 0.2s;
+            margin-bottom: 12px;
         }
 
-        .new-session-btn:hover {
+        .analysis-btn:hover:not(:disabled) {
             background: rgba(201, 162, 39, 0.25);
         }
 
-        .sessions-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
+        .analysis-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
-        .session-item {
-            padding: 12px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 4px;
-            transition: background 0.2s;
-        }
-
-        .session-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .session-item.active {
-            background: rgba(201, 162, 39, 0.15);
-            border: 1px solid rgba(201, 162, 39, 0.3);
-        }
-
-        .session-item .date {
+        .analysis-status {
             font-size: 0.8rem;
             color: #888;
+            margin-bottom: 8px;
         }
 
-        .session-item .count {
+        .analysis-status .ready {
+            color: #4caf50;
+        }
+
+        .profile-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .profile-content {
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        .profile-content h1, .profile-content h2, .profile-content h3 {
+            color: #c9a227;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+
+        .profile-content h1 { font-size: 1.1rem; }
+        .profile-content h2 { font-size: 1rem; }
+        .profile-content h3 { font-size: 0.9rem; }
+
+        .profile-content ul, .profile-content ol {
+            margin-left: 20px;
+            margin-bottom: 12px;
+        }
+
+        .profile-content li {
+            margin-bottom: 4px;
+        }
+
+        .profile-content p {
+            margin-bottom: 12px;
+        }
+
+        .profile-meta {
             font-size: 0.75rem;
             color: #666;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .profile-meta .consensus {
+            color: #4caf50;
+        }
+
+        .profile-meta .no-consensus {
+            color: #ff9800;
+        }
+
+        .no-profile {
+            text-align: center;
+            padding: 32px 16px;
+            color: #666;
+            font-size: 0.85rem;
         }
 
         .main {
@@ -281,6 +337,113 @@
                 margin-left: 20px;
             }
         }
+
+        .auth-section {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .auth-user {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .auth-user-email {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .auth-btn {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .auth-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .auth-btn.primary {
+            background: rgba(201, 162, 39, 0.2);
+            border-color: rgba(201, 162, 39, 0.4);
+            color: #c9a227;
+        }
+
+        .auth-btn.primary:hover {
+            background: rgba(201, 162, 39, 0.3);
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .auth-form input {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+
+        .auth-form input:focus {
+            outline: none;
+            border-color: #c9a227;
+        }
+
+        .auth-form input::placeholder {
+            color: #666;
+        }
+
+        .auth-toggle {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .auth-toggle a {
+            color: #c9a227;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .auth-toggle a:hover {
+            text-decoration: underline;
+        }
+
+        .auth-error {
+            padding: 8px 12px;
+            background: rgba(255, 87, 87, 0.15);
+            border: 1px solid rgba(255, 87, 87, 0.3);
+            border-radius: 6px;
+            color: #ff5757;
+            font-size: 0.8rem;
+        }
+
+        .auth-success {
+            padding: 8px 12px;
+            background: rgba(76, 175, 80, 0.15);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 6px;
+            color: #4caf50;
+            font-size: 0.8rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -290,8 +453,37 @@
                 <h1>Stoic Emperor</h1>
                 <p>Marcus Aurelius AI</p>
             </div>
-            <button class="new-session-btn" onclick="createNewSession()">+ New Session</button>
-            <div class="sessions-list" id="sessions-list"></div>
+            <div class="auth-section" id="auth-section">
+                <div id="auth-logged-in" class="hidden">
+                    <div class="auth-user">
+                        <span class="auth-user-email" id="user-email"></span>
+                        <button class="auth-btn" onclick="signOut()">Sign Out</button>
+                    </div>
+                </div>
+                <div id="auth-logged-out">
+                    <div id="auth-form-container">
+                        <form class="auth-form" id="login-form" onsubmit="handleAuth(event, 'login')">
+                            <input type="email" id="auth-email" placeholder="Email" required>
+                            <input type="password" id="auth-password" placeholder="Password" required minlength="6">
+                            <div id="auth-error" class="auth-error hidden"></div>
+                            <div id="auth-success" class="auth-success hidden"></div>
+                            <button type="submit" class="auth-btn primary" id="auth-submit">Sign In</button>
+                        </form>
+                        <div class="auth-toggle">
+                            <span id="auth-toggle-text">No account? </span>
+                            <a onclick="toggleAuthMode()"><span id="auth-toggle-link">Sign Up</span></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <h3>Analysis</h3>
+                <div class="analysis-status" id="analysis-status"></div>
+                <button class="analysis-btn" id="analyze-btn" onclick="runAnalysis()">Run Analysis</button>
+            </div>
+            <div class="profile-panel" id="profile-panel">
+                <div class="no-profile">No profile yet. Chat first, then run analysis.</div>
+            </div>
         </aside>
 
         <main class="main">
@@ -333,52 +525,238 @@
 
     <script>
         let currentSessionId = null;
+        let authToken = localStorage.getItem('authToken');
+        let currentUser = null;
+        let authMode = 'login';
 
-        async function loadSessions() {
-            try {
-                const response = await fetch('/api/sessions');
-                const sessions = await response.json();
-                const list = document.getElementById('sessions-list');
-
-                if (sessions.length === 0) {
-                    list.innerHTML = '<p style="padding: 16px; color: #666; font-size: 0.85rem;">No sessions yet</p>';
-                    return;
+        async function initAuth() {
+            if (authToken) {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    });
+                    if (response.ok) {
+                        const user = await response.json();
+                        setUser(user);
+                    } else {
+                        localStorage.removeItem('authToken');
+                        authToken = null;
+                        setUser(null);
+                    }
+                } catch (error) {
+                    console.error('Auth check failed:', error);
+                    setUser(null);
                 }
-
-                list.innerHTML = sessions.map(s => `
-                    <div class="session-item ${s.id === currentSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')">
-                        <div class="date">${formatDate(s.created_at)}</div>
-                        <div class="count">${s.message_count} messages</div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load sessions:', error);
+            } else {
+                setUser(null);
             }
         }
 
-        async function loadSession(sessionId) {
-            currentSessionId = sessionId;
-            loadSessions();
-
-            try {
-                const response = await fetch(`/api/sessions/${sessionId}/messages`);
-                const messages = await response.json();
-                renderMessages(messages);
-            } catch (error) {
-                console.error('Failed to load messages:', error);
+        function setUser(user) {
+            currentUser = user;
+            const loggedIn = document.getElementById('auth-logged-in');
+            const loggedOut = document.getElementById('auth-logged-out');
+            const emailEl = document.getElementById('user-email');
+            
+            if (user) {
+                loggedIn.classList.remove('hidden');
+                loggedOut.classList.add('hidden');
+                emailEl.textContent = user.email;
+            } else {
+                loggedIn.classList.add('hidden');
+                loggedOut.classList.remove('hidden');
             }
         }
 
-        async function createNewSession() {
-            try {
-                const response = await fetch('/api/sessions', { method: 'POST' });
-                const session = await response.json();
-                currentSessionId = session.id;
-                loadSessions();
-                renderMessages([]);
-            } catch (error) {
-                console.error('Failed to create session:', error);
+        function toggleAuthMode() {
+            authMode = authMode === 'login' ? 'signup' : 'login';
+            const submitBtn = document.getElementById('auth-submit');
+            const toggleText = document.getElementById('auth-toggle-text');
+            const toggleLink = document.getElementById('auth-toggle-link');
+            
+            if (authMode === 'signup') {
+                submitBtn.textContent = 'Sign Up';
+                toggleText.textContent = 'Have an account? ';
+                toggleLink.textContent = 'Sign In';
+            } else {
+                submitBtn.textContent = 'Sign In';
+                toggleText.textContent = 'No account? ';
+                toggleLink.textContent = 'Sign Up';
             }
+            hideAuthMessages();
+        }
+
+        function showAuthError(message) {
+            const errorEl = document.getElementById('auth-error');
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        function showAuthSuccess(message) {
+            const successEl = document.getElementById('auth-success');
+            successEl.textContent = message;
+            successEl.classList.remove('hidden');
+            document.getElementById('auth-error').classList.add('hidden');
+        }
+
+        function hideAuthMessages() {
+            document.getElementById('auth-error').classList.add('hidden');
+            document.getElementById('auth-success').classList.add('hidden');
+        }
+
+        async function handleAuth(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const submitBtn = document.getElementById('auth-submit');
+            
+            submitBtn.disabled = true;
+            hideAuthMessages();
+            
+            try {
+                const endpoint = authMode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    showAuthError(data.detail || 'Authentication failed');
+                } else {
+                    authToken = data.token;
+                    localStorage.setItem('authToken', authToken);
+                    setUser({ id: data.user_id, email: data.email });
+                    document.getElementById('auth-email').value = '';
+                    document.getElementById('auth-password').value = '';
+                    loadUserData();
+                }
+            } catch (error) {
+                showAuthError('Authentication failed');
+                console.error('Auth error:', error);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        async function signOut() {
+            authToken = null;
+            localStorage.removeItem('authToken');
+            setUser(null);
+            currentSessionId = null;
+            renderMessages([]);
+            loadUserData();
+        }
+
+        function getAuthHeaders() {
+            if (authToken) {
+                return { 'Authorization': `Bearer ${authToken}` };
+            }
+            return {};
+        }
+
+        async function loadUserData() {
+            currentSessionId = null;
+            await Promise.all([
+                loadLatestSession(),
+                loadAnalysisStatus(),
+                loadProfile()
+            ]);
+        }
+
+        async function loadAnalysisStatus() {
+            try {
+                const headers = getAuthHeaders();
+                const response = await fetch('/api/analysis/status', { headers });
+                const status = await response.json();
+                const statusEl = document.getElementById('analysis-status');
+                const btn = document.getElementById('analyze-btn');
+
+                if (status.can_analyze) {
+                    statusEl.innerHTML = `<span class="ready">${status.sessions_since_analysis} sessions ready</span>`;
+                } else {
+                    statusEl.innerHTML = `${status.sessions_since_analysis}/${status.threshold} sessions`;
+                }
+            } catch (error) {
+                console.error('Failed to load analysis status:', error);
+            }
+        }
+
+        async function loadProfile() {
+            try {
+                const headers = getAuthHeaders();
+                const response = await fetch('/api/profile', { headers });
+                const panel = document.getElementById('profile-panel');
+
+                if (response.status === 200) {
+                    const profile = await response.json();
+                    if (profile) {
+                        const consensusHtml = profile.consensus_reached !== null
+                            ? `<span class="${profile.consensus_reached ? 'consensus' : 'no-consensus'}">${profile.consensus_reached ? '✓ Consensus' : '⚠ No consensus'}</span>`
+                            : '';
+                        const stabilityHtml = profile.stability_score !== null
+                            ? ` • Stability: ${profile.stability_score.toFixed(2)}`
+                            : '';
+
+                        panel.innerHTML = `
+                            <div class="profile-meta">
+                                Version ${profile.version} • ${formatDate(profile.created_at)}
+                                ${consensusHtml}${stabilityHtml}
+                            </div>
+                            <div class="profile-content">${renderMarkdown(profile.content)}</div>
+                        `;
+                        return;
+                    }
+                }
+                panel.innerHTML = '<div class="no-profile">No profile yet. Chat first, then run analysis.</div>';
+            } catch (error) {
+                console.error('Failed to load profile:', error);
+            }
+        }
+
+        async function runAnalysis() {
+            const btn = document.getElementById('analyze-btn');
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+
+            try {
+                const headers = getAuthHeaders();
+                const response = await fetch('/api/analyze', { method: 'POST', headers });
+                if (response.ok) {
+                    await loadProfile();
+                    await loadAnalysisStatus();
+                } else {
+                    const error = await response.json();
+                    alert('Analysis failed: ' + (error.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Failed to run analysis:', error);
+                alert('Analysis failed. Check console for details.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Analysis';
+            }
+        }
+
+        function renderMarkdown(text) {
+            return text
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/^- (.*$)/gm, '<li>$1</li>')
+                .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/^(?!<[hulo])/gm, '<p>')
+                .replace(/(?<![>])$/gm, '</p>')
+                .replace(/<p><\/p>/g, '')
+                .replace(/<p>(<[hulo])/g, '$1')
+                .replace(/(<\/[hulo][^>]*>)<\/p>/g, '$1');
         }
 
         function renderMessages(messages) {
@@ -433,9 +811,10 @@
             document.getElementById('loading').classList.add('visible');
 
             try {
+                const authHeaders = getAuthHeaders();
                 const response = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...authHeaders },
                     body: JSON.stringify({
                         message: message,
                         session_id: currentSessionId
@@ -445,7 +824,7 @@
                 const data = await response.json();
                 currentSessionId = data.session_id;
                 addMessage('emperor', data.response);
-                loadSessions();
+                loadAnalysisStatus();
             } catch (error) {
                 console.error('Failed to send message:', error);
                 addMessage('emperor', 'I apologize, but I am unable to respond at this moment. Please try again.');
@@ -485,7 +864,36 @@
             return div.innerHTML;
         }
 
-        loadSessions();
+        async function loadLatestSession() {
+            try {
+                const headers = getAuthHeaders();
+                const response = await fetch('/api/sessions', { headers });
+                if (!response.ok) return;
+
+                const sessions = await response.json();
+                if (sessions.length === 0) return;
+
+                const latestSession = sessions[0];
+                currentSessionId = latestSession.id;
+
+                if (latestSession.message_count > 0) {
+                    const msgResponse = await fetch(`/api/sessions/${latestSession.id}/messages`, { headers });
+                    if (msgResponse.ok) {
+                        const messages = await msgResponse.json();
+                        renderMessages(messages);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load session:', error);
+            }
+        }
+
+        async function init() {
+            await initAuth();
+            await loadUserData();
+        }
+
+        init();
     </script>
 </body>
 </html>

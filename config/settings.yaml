@@ -2,10 +2,14 @@ models:
   main: "${LLM_MAIN_MODEL}"
   reviewer: "${LLM_REVIEWER_MODEL}"
 
+database:
+  url: "${DATABASE_URL:-sqlite:///./data/stoic_emperor.db}"
+
 paths:
   stoic_texts: "./data/stoic_texts"
-  vector_db: "./data/vector_db"
-  sqlite_db: "./data/stoic_emperor.db"
+
+auth:
+  jwt_secret: "${JWT_SECRET}"
 
 memory:
   max_context_tokens: 4000
@@ -21,3 +25,9 @@ aegean_consensus:
   beta_threshold: 2
   alpha_quorum: 1.0
   sessions_between_analysis: 5
+
+condensation:
+  hot_buffer_tokens: 4000
+  chunk_threshold_tokens: 8000
+  summary_budget_tokens: 12000
+  use_consensus: true

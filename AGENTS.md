@@ -23,6 +23,7 @@ All telemetry is disabled via `src/utils/privacy.py`:
 - Anthropic: Review their data usage policy
 
 ### When Adding Dependencies
+- **Always add to `requirements.txt` - never run `pip install` directly**
 - Audit new packages for telemetry/analytics
 - Add disable flags to `src/utils/privacy.py`
 - Prefer local-only packages

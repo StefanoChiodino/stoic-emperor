@@ -15,6 +15,7 @@ from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
 from src.models.schemas import User, Session, Message
 from src.utils.config import load_config
+from src.memory.condensation import CondensationManager
 
 console = Console()
 
@@ -23,9 +24,10 @@ DEFAULT_USER_ID = "default_user"
 
 def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> None:
     config = load_config()
-    db = Database(config["paths"]["sqlite_db"])
-    vectors = VectorStore(config["paths"]["vector_db"])
+    db = Database(config["database"]["url"])
+    vectors = VectorStore(config["database"]["url"])
     brain = EmperorBrain(config=config)
+    condensation = CondensationManager(db, config)
 
     user = db.get_or_create_user(user_id)
 
@@ -92,6 +94,10 @@ def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> No
             padding=(1, 2)
         ))
         console.print()
+
+        if condensation.should_condense(user.id):
+            with console.status("[dim]Condensing conversation history...[/dim]", spinner="dots"):
+                condensation.maybe_condense(user.id, verbose=False)
 
     console.print("\n[dim]The Emperor withdraws. May you find virtue in your path.[/dim]\n")
 

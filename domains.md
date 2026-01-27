@@ -3,3 +3,9 @@ emperor.talk
 emperor.chat
 stoicemperor.com
 aurelius.coach
+emperor.live
+TheEmperor.Live
+TheEmperor.Online
+TheEmperorReturns.com
+MarcusAureliusReturns.com
+theemperor.ai
