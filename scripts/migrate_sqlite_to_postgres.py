@@ -27,13 +27,13 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
 
     sqlite_conn = sqlite3.connect(sqlite_path)
     sqlite_conn.row_factory = sqlite3.Row
-    
+
     if dry_run:
         print("[DRY RUN] Skipping actual migration. Use --execute to perform migration.")
         return analyze_migration(sqlite_conn)
-    
+
     pg_conn = psycopg.connect(postgres_url, row_factory=dict_row)
-    
+
     try:
         with pg_conn.cursor() as cur:
             print("📊 Migrating users...")
@@ -46,7 +46,7 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 )
                 user_count += 1
             print(f"  ✓ Migrated {user_count} users")
-            
+
             print("📝 Migrating sessions...")
             sqlite_sessions = sqlite_conn.execute("SELECT * FROM sessions").fetchall()
             session_count = 0
@@ -58,7 +58,7 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 )
                 session_count += 1
             print(f"  ✓ Migrated {session_count} sessions")
-            
+
             print("💬 Migrating messages...")
             sqlite_messages = sqlite_conn.execute("SELECT * FROM messages").fetchall()
             message_count = 0
@@ -72,7 +72,7 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 )
                 message_count += 1
             print(f"  ✓ Migrated {message_count} messages")
-            
+
             print("🧠 Migrating semantic insights...")
             sqlite_insights = sqlite_conn.execute("SELECT * FROM semantic_insights").fetchall()
             insight_count = 0
@@ -85,7 +85,7 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 )
                 insight_count += 1
             print(f"  ✓ Migrated {insight_count} insights")
-            
+
             try:
                 print("📚 Migrating profiles...")
                 sqlite_profiles = sqlite_conn.execute("SELECT * FROM profiles").fetchall()
@@ -102,7 +102,7 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 print(f"  ✓ Migrated {profile_count} profiles")
             except Exception as e:
                 print(f"  ⚠ Profiles table not found or error: {e}")
-            
+
             try:
                 print("📦 Migrating condensed summaries...")
                 sqlite_summaries = sqlite_conn.execute("SELECT * FROM condensed_summaries").fetchall()
@@ -111,9 +111,9 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                     source_ids = summary["source_summary_ids"] if summary.get("source_summary_ids") else '[]'
                     consensus = summary["consensus_log"] if summary.get("consensus_log") else None
                     cur.execute(
-                        """INSERT INTO condensed_summaries 
-                           (id, user_id, level, content, period_start, period_end, 
-                            source_message_count, source_word_count, source_summary_ids, 
+                        """INSERT INTO condensed_summaries
+                           (id, user_id, level, content, period_start, period_end,
+                            source_message_count, source_word_count, source_summary_ids,
                             consensus_log, created_at)
                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
                            ON CONFLICT (id) DO NOTHING""",
@@ -126,14 +126,14 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
                 print(f"  ✓ Migrated {summary_count} summaries")
             except Exception as e:
                 print(f"  ⚠ Condensed summaries table not found or error: {e}")
-            
+
             pg_conn.commit()
-        
+
         print("\n✅ Migration complete!")
         print("\n⚠️  IMPORTANT: Vector data NOT migrated automatically.")
         print("   Re-import your stoic texts using:")
         print("   python -m src.cli.import_resources stoic ./data/stoic_texts")
-        
+
     except Exception as e:
         pg_conn.rollback()
         print(f"\n❌ Migration failed: {e}")
@@ -146,19 +146,19 @@ def migrate(sqlite_path: str, postgres_url: str, dry_run: bool = False):
 def analyze_migration(sqlite_conn):
     """Analyze what would be migrated without actually migrating."""
     print("Analyzing SQLite database...\n")
-    
+
     tables = [
         ("users", "SELECT COUNT(*) as count FROM users"),
         ("sessions", "SELECT COUNT(*) as count FROM sessions"),
         ("messages", "SELECT COUNT(*) as count FROM messages"),
         ("semantic_insights", "SELECT COUNT(*) as count FROM semantic_insights"),
     ]
-    
+
     optional_tables = [
         ("profiles", "SELECT COUNT(*) as count FROM profiles"),
         ("condensed_summaries", "SELECT COUNT(*) as count FROM condensed_summaries"),
     ]
-    
+
     print("📊 Required Tables:")
     for table_name, query in tables:
         try:
@@ -167,7 +167,7 @@ def analyze_migration(sqlite_conn):
             print(f"  {table_name}: {count} rows")
         except Exception as e:
             print(f"  {table_name}: ERROR - {e}")
-    
+
     print("\n📦 Optional Tables:")
     for table_name, query in optional_tables:
         try:
@@ -176,10 +176,10 @@ def analyze_migration(sqlite_conn):
             print(f"  {table_name}: {count} rows")
         except Exception:
             print(f"  {table_name}: Not found (OK)")
-    
+
     print("\n⚠️  Vector data in ChromaDB will NOT be migrated.")
     print("   You will need to re-import stoic texts after migration.")
-    
+
     sqlite_conn.close()
 
 
@@ -193,7 +193,7 @@ Examples:
   python scripts/migrate_sqlite_to_postgres.py \\
     --sqlite ./data/stoic_emperor.db \\
     --postgres "postgresql://localhost/stoic_emperor"
-  
+
   # Execute migration
   python scripts/migrate_sqlite_to_postgres.py \\
     --sqlite ./data/stoic_emperor.db \\
@@ -218,9 +218,9 @@ Note: Vector data must be re-imported after migration.
         action="store_true",
         help="Execute the migration (default is dry-run)"
     )
-    
+
     args = parser.parse_args()
-    
+
     migrate(args.sqlite, args.postgres, dry_run=not args.execute)
 
 

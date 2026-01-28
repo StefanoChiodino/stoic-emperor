@@ -9,7 +9,7 @@ from pathlib import Path
 
 from src.models.schemas import User, Session, Message, SemanticInsight, PsychUpdate, CondensedSummary
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 2
 
 SQLITE_MIGRATIONS = {
     1: """
@@ -80,11 +80,6 @@ SQLITE_MIGRATIONS = {
 
         CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
         CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
-    """,
-    3: """
-        ALTER TABLE users ADD COLUMN email TEXT UNIQUE;
-        ALTER TABLE users ADD COLUMN password_hash TEXT;
-        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     """
 }
 
@@ -158,11 +153,6 @@ POSTGRES_MIGRATIONS = {
         CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
         CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
     """,
-    3: """
-        ALTER TABLE users ADD COLUMN email TEXT UNIQUE;
-        ALTER TABLE users ADD COLUMN password_hash TEXT;
-        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-    """
 }
 
 
@@ -276,9 +266,8 @@ class Database:
         with self._connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                f"INSERT INTO users (id, email, password_hash, created_at) VALUES ({ph}, {ph}, {ph}, {ph})",
-                (user.id, user.email, user.password_hash,
-                 user.created_at.isoformat() if not self.is_postgres else user.created_at)
+                f"INSERT INTO users (id, created_at) VALUES ({ph}, {ph})",
+                (user.id, user.created_at.isoformat() if not self.is_postgres else user.created_at)
             )
             cursor.close()
         return user
@@ -293,24 +282,6 @@ class Database:
             if row:
                 return User(
                     id=row["id"],
-                    email=row.get("email"),
-                    password_hash=row.get("password_hash"),
-                    created_at=self._parse_timestamp(row["created_at"])
-                )
-        return None
-
-    def get_user_by_email(self, email: str) -> Optional[User]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(f"SELECT * FROM users WHERE email = {ph}", (email,))
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
-                return User(
-                    id=row["id"],
-                    email=row.get("email"),
-                    password_hash=row.get("password_hash"),
                     created_at=self._parse_timestamp(row["created_at"])
                 )
         return None

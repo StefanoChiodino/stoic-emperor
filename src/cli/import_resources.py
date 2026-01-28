@@ -33,7 +33,7 @@ def import_journaling(
     brain = EmperorBrain(config=config)
 
     file_path = Path(path)
-    
+
     if not file_path.exists():
         console.print(f"[red]File not found: {path}[/red]")
         return
@@ -73,9 +73,9 @@ def _import_single_file(
     brain: EmperorBrain
 ) -> None:
     console.print(f"  Importing: {file_path.name}")
-    
+
     content = file_path.read_text(encoding="utf-8")
-    
+
     if not content.strip():
         console.print(f"    [yellow]Empty file, skipping[/yellow]")
         return

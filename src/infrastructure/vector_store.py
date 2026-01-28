@@ -15,10 +15,10 @@ class VectorStore:
 
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db")
-        
+
         parsed = urlparse(self.database_url)
         self.is_postgres = parsed.scheme in ("postgresql", "postgres")
-        
+
         if self.is_postgres:
             import psycopg2
             from psycopg2 import pool as pg_pool
@@ -34,7 +34,7 @@ class VectorStore:
             db_path = self.database_url.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             self._sqlite_path = db_path
-        
+
         self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
         self._ensure_extension()
         self._ensure_collections()
@@ -63,10 +63,14 @@ class VectorStore:
 
     def _ensure_extension(self) -> None:
         if self.is_postgres:
-            with self._connection() as conn:
+            conn = self._pool.getconn()
+            try:
                 cursor = conn.cursor()
                 cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
                 cursor.close()
+                conn.commit()
+            finally:
+                self._pool.putconn(conn)
 
     def _ensure_collections(self) -> None:
         with self._connection() as conn:
@@ -104,7 +108,7 @@ class VectorStore:
     ) -> None:
         if embeddings is None:
             embeddings = self.embedding_model.encode(documents).tolist()
-        
+
         with self._connection() as conn:
             cursor = conn.cursor()
             for i, doc_id in enumerate(ids):
@@ -113,7 +117,7 @@ class VectorStore:
                     cursor.execute(
                         f"""INSERT INTO vector_{collection} (id, document, embedding, metadata)
                            VALUES (%s, %s, %s, %s)
-                           ON CONFLICT (id) DO UPDATE 
+                           ON CONFLICT (id) DO UPDATE
                            SET document = EXCLUDED.document,
                                embedding = EXCLUDED.embedding,
                                metadata = EXCLUDED.metadata""",
@@ -143,12 +147,12 @@ class VectorStore:
     ) -> Dict[str, Any]:
         if query_embeddings is None and query_texts:
             query_embeddings = self.embedding_model.encode(query_texts).tolist()
-        
+
         if not query_embeddings:
             raise ValueError("Either query_texts or query_embeddings must be provided")
-        
+
         results = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
-        
+
         with self._connection() as conn:
             if self.is_postgres:
                 from psycopg2.extras import RealDictCursor
@@ -156,16 +160,16 @@ class VectorStore:
                 for query_embedding in query_embeddings:
                     where_clause = ""
                     params: List[Any] = [query_embedding, n_results]
-                    
+
                     if where:
                         conditions = []
                         for key, value in where.items():
                             conditions.append(f"metadata->>'{key}' = %s")
                             params.insert(-1, str(value))
                         where_clause = "WHERE " + " AND ".join(conditions)
-                    
+
                     cursor.execute(
-                        f"""SELECT id, document, metadata, 
+                        f"""SELECT id, document, metadata,
                                1 - (embedding <=> %s::vector) as similarity
                            FROM vector_{collection}
                            {where_clause}
@@ -173,7 +177,7 @@ class VectorStore:
                            LIMIT %s""",
                         params
                     )
-                    
+
                     rows = cursor.fetchall()
                     results["ids"][0].extend([row["id"] for row in rows])
                     results["documents"][0].extend([row["document"] for row in rows])
@@ -183,20 +187,20 @@ class VectorStore:
                 cursor = conn.cursor()
                 where_clause = ""
                 params: List[Any] = []
-                
+
                 if where:
                     conditions = []
                     for key, value in where.items():
                         conditions.append(f"json_extract(metadata, '$.{key}') = ?")
                         params.append(str(value))
                     where_clause = "WHERE " + " AND ".join(conditions)
-                
+
                 cursor.execute(
                     f"SELECT id, document, embedding, metadata FROM vector_{collection} {where_clause}",
                     params
                 )
                 rows = cursor.fetchall()
-                
+
                 scored_rows = []
                 for row in rows:
                     embedding = json.loads(row["embedding"]) if row["embedding"] else None
@@ -204,19 +208,19 @@ class VectorStore:
                         for query_embedding in query_embeddings:
                             similarity = self._cosine_similarity(query_embedding, embedding)
                             scored_rows.append((row, similarity))
-                
+
                 scored_rows.sort(key=lambda x: x[1], reverse=True)
                 scored_rows = scored_rows[:n_results]
-                
+
                 for row, similarity in scored_rows:
                     results["ids"][0].append(row["id"])
                     results["documents"][0].append(row["document"])
                     metadata = json.loads(row["metadata"]) if row["metadata"] else {}
                     results["metadatas"][0].append(metadata)
                     results["distances"][0].append(1 - similarity)
-            
+
             cursor.close()
-        
+
         return results
 
     def get(
@@ -227,14 +231,14 @@ class VectorStore:
         limit: Optional[int] = None
     ) -> Dict[str, Any]:
         results = {"ids": [], "documents": [], "metadatas": []}
-        
+
         with self._connection() as conn:
             if self.is_postgres:
                 from psycopg2.extras import RealDictCursor
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
                 where_clause = ""
                 params: List[Any] = []
-                
+
                 if ids:
                     placeholders = ",".join(["%s"] * len(ids))
                     where_clause = f"WHERE id IN ({placeholders})"
@@ -245,14 +249,14 @@ class VectorStore:
                         conditions.append(f"metadata->>'{key}' = %s")
                         params.append(str(value))
                     where_clause = "WHERE " + " AND ".join(conditions)
-                
+
                 limit_clause = f"LIMIT {limit}" if limit else ""
-                
+
                 cursor.execute(
                     f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}",
                     params
                 )
-                
+
                 rows = cursor.fetchall()
                 results["ids"] = [row["id"] for row in rows]
                 results["documents"] = [row["document"] for row in rows]
@@ -261,7 +265,7 @@ class VectorStore:
                 cursor = conn.cursor()
                 where_clause = ""
                 params: List[Any] = []
-                
+
                 if ids:
                     placeholders = ",".join(["?"] * len(ids))
                     where_clause = f"WHERE id IN ({placeholders})"
@@ -272,21 +276,21 @@ class VectorStore:
                         conditions.append(f"json_extract(metadata, '$.{key}') = ?")
                         params.append(str(value))
                     where_clause = "WHERE " + " AND ".join(conditions)
-                
+
                 limit_clause = f"LIMIT {limit}" if limit else ""
-                
+
                 cursor.execute(
                     f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}",
                     params
                 )
-                
+
                 rows = cursor.fetchall()
                 results["ids"] = [row["id"] for row in rows]
                 results["documents"] = [row["document"] for row in rows]
                 results["metadatas"] = [json.loads(row["metadata"]) if row["metadata"] else {} for row in rows]
-            
+
             cursor.close()
-        
+
         return results
 
     def delete(
@@ -299,7 +303,7 @@ class VectorStore:
             cursor = conn.cursor()
             where_clause = ""
             params: List[Any] = []
-            
+
             if self.is_postgres:
                 if ids:
                     placeholders = ",".join(["%s"] * len(ids))
@@ -322,7 +326,7 @@ class VectorStore:
                         conditions.append(f"json_extract(metadata, '$.{key}') = ?")
                         params.append(str(value))
                     where_clause = "WHERE " + " AND ".join(conditions)
-            
+
             cursor.execute(f"DELETE FROM vector_{collection} {where_clause}", params)
             cursor.close()
 

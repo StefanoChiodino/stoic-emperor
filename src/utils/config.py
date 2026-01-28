@@ -34,8 +34,11 @@ def substitute_env_vars(config: Any) -> Any:
     elif isinstance(config, list):
         return [substitute_env_vars(v) for v in config]
     elif isinstance(config, str) and config.startswith("${") and config.endswith("}"):
-        env_var = config[2:-1]
-        return os.getenv(env_var, config)
+        inner = config[2:-1]
+        if ":-" in inner:
+            var_name, default_value = inner.split(":-", 1)
+            return os.getenv(var_name, default_value)
+        return os.getenv(inner, config)
     return config
 
 def default_config() -> Dict[str, Any]:

@@ -86,7 +86,7 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
 
 ### 4. Configuration Updates
 
-**Files**: 
+**Files**:
 - `src/utils/config.py`
 - `config/settings.yaml`
 - `.env.example`

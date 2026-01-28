@@ -13,8 +13,8 @@ All telemetry is disabled via `src/utils/privacy.py`:
 **Every CLI entry point imports `privacy.py` FIRST** before any other module.
 
 ### Data Storage
-- All data stays local (SQLite + ChromaDB files)
-- No cloud sync, no external APIs except the LLM provider
+- SQLite + ChromaDB with persistent volumes (Railway/Fly)
+- No external APIs except the LLM provider
 - `.env` file is gitignored
 
 ### LLM Provider Considerations
@@ -32,7 +32,7 @@ All telemetry is disabled via `src/utils/privacy.py`:
 
 ## Project Overview
 
-CLI-first therapy chatbot with Marcus Aurelius as persona. Uses a **hybrid analysis architecture**:
+**SaaS therapy chatbot** with Marcus Aurelius as persona. Web-first with CLI for development/admin. Uses a **hybrid analysis architecture**:
 - **Split-brain**: Real-time psychological extraction embedded in each chat response (JSON with visible reply + hidden `psych_update`)
 - **Aegean Consensus**: Periodic dual-model consensus (ported from `shrink`) for deep psychological profiling
 
@@ -52,7 +52,8 @@ src/
 
 - **SQLite**: Relational data (users, sessions, messages, profiles, semantic_insights)
 - **ChromaDB**: Vector collections (episodic, semantic, stoic_wisdom, psychoanalysis)
-- Migration path to PostgreSQL + pgvector is planned but deferred.
+
+Both persist to mounted volumes in production. PostgreSQL + pgvector only needed if horizontal scaling required.
 
 ## Key Patterns
 

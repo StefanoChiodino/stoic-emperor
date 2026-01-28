@@ -52,18 +52,18 @@ PROFILE_SYNTHESIS_PROMPT = """profile_synthesis: |
 def show_latest_profile(user_id: str) -> bool:
     config = load_config()
     db = Database(config["database"]["url"])
-    
+
     profile = db.get_latest_profile(user_id)
     if not profile:
         console.print("[yellow]No profile found. Run analysis first.[/yellow]")
         return False
-    
+
     console.print(Panel.fit(
         f"[bold]PSYCHOLOGICAL PROFILE[/bold]\n"
         f"[dim]Version {profile['version']} • {profile['created_at']}[/dim]",
         border_style="blue"
     ))
-    
+
     if profile.get("consensus_log"):
         log = profile["consensus_log"]
         if log.get("consensus_reached"):
@@ -72,7 +72,7 @@ def show_latest_profile(user_id: str) -> bool:
             console.print("[yellow]⚠️ No consensus[/yellow]")
         if log.get("stability_score"):
             console.print(f"[dim]Stability score: {log['stability_score']:.2f}[/dim]")
-    
+
     console.print()
     console.print(Panel(
         Markdown(profile["content"]),
@@ -116,7 +116,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
     console.print("\n[dim]Condensing conversation history...[/dim]")
     if condensation.should_condense(user_id):
         condensation.maybe_condense(user_id, verbose=True)
-    
+
     summaries = db.get_condensed_summaries(user_id)
     condensed_history = ""
     if summaries:
@@ -148,7 +148,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
     console.print(f"\n[dim]Running consensus analysis...[/dim]")
 
     prompts = {"profile_synthesis": PROFILE_SYNTHESIS_PROMPT}
-    
+
     consensus = AegeanConsensusProtocol(
         model_a=config["models"]["main"],
         model_b=config["models"]["reviewer"],
@@ -178,7 +178,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         console.print("[yellow]⚠️ No consensus - using primary model output[/yellow]")
 
     console.print(f"[dim]Stability score: {result.stability_score:.2f}[/dim]")
-    
+
     if result.critical_flags:
         console.print("[red]Critical flags:[/red]")
         for flag in result.critical_flags:
@@ -199,9 +199,9 @@ def _save_profile(db: Database, user_id: str, result: ConsensusResult) -> None:
             "SELECT MAX(version) as v FROM profiles WHERE user_id = ?",
             (user_id,)
         ).fetchone()
-        
+
         version = (current_version["v"] or 0) + 1 if current_version else 1
-        
+
         import uuid
         conn.execute(
             """INSERT INTO profiles (id, user_id, version, content, consensus_log, created_at)
@@ -224,5 +224,5 @@ if __name__ == "__main__":
     parser.add_argument("--force", action="store_true", help="Force analysis regardless of session count")
     parser.add_argument("--show", action="store_true", help="Show latest profile without running analysis")
     args = parser.parse_args()
-    
+
     main(user_id=args.user, force=args.force, show=args.show)

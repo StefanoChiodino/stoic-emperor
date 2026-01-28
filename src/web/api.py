@@ -17,10 +17,7 @@ from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
 from src.models.schemas import Session, Message, User
 from src.utils.config import load_config
-from src.utils.auth import (
-    get_user_id_from_token, optional_auth, security,
-    hash_password, verify_password, create_access_token
-)
+from src.utils.auth import get_user_id_from_token, optional_auth, security
 
 app = FastAPI(title="Stoic Emperor", docs_url="/api/docs")
 
@@ -31,6 +28,8 @@ brain = EmperorBrain(config=config)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEFAULT_USER_ID = "default_user"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 
 def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:
@@ -91,70 +90,18 @@ class AnalysisStatus(BaseModel):
     has_profile: bool
 
 
-class SignupRequest(BaseModel):
-    email: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class AuthResponse(BaseModel):
-    token: str
-    user_id: str
-    email: str
-
-
-class UserInfo(BaseModel):
-    id: str
-    email: str
-
-
 @app.get("/")
 async def index():
     return FileResponse(static_path / "index.html")
 
 
-@app.post("/api/auth/signup", response_model=AuthResponse)
-async def signup(request: SignupRequest):
-    if len(request.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
-    
-    existing = db.get_user_by_email(request.email)
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user = User(
-        email=request.email,
-        password_hash=hash_password(request.password)
-    )
-    db.create_user(user)
-    
-    token = create_access_token(user.id)
-    return AuthResponse(token=token, user_id=user.id, email=user.email)
-
-
-@app.post("/api/auth/login", response_model=AuthResponse)
-async def login(request: LoginRequest):
-    user = db.get_user_by_email(request.email)
-    if not user or not user.password_hash:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    if not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    token = create_access_token(user.id)
-    return AuthResponse(token=token, user_id=user.id, email=user.email)
-
-
-@app.get("/api/auth/me", response_model=UserInfo)
-async def get_current_user(user_id: str = Depends(get_current_user_id)):
-    user = db.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return UserInfo(id=user.id, email=user.email or "")
+@app.get("/api/config")
+async def get_config():
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_anon_key": SUPABASE_ANON_KEY,
+        "environment": ENVIRONMENT
+    }
 
 
 @app.post("/api/chat", response_model=ChatResponse)

@@ -42,8 +42,6 @@ class Session(BaseModel):
 
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: Optional[str] = None
-    password_hash: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
 
 class CondensedSummary(BaseModel):

@@ -186,10 +186,10 @@ def migrate(sqlite_path: str, postgres_url: str):
     # Connect to SQLite
     sqlite_conn = sqlite3.connect(sqlite_path)
     sqlite_conn.row_factory = sqlite3.Row
-    
+
     # Connect to PostgreSQL
     pg_conn = psycopg.connect(postgres_url)
-    
+
     with pg_conn.cursor() as cur:
         # Migrate users
         print("Migrating users...")
@@ -199,7 +199,7 @@ def migrate(sqlite_path: str, postgres_url: str):
                 "INSERT INTO users (id, created_at) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                 (user["id"], user["created_at"])
             )
-        
+
         # Migrate sessions
         print("Migrating sessions...")
         sqlite_sessions = sqlite_conn.execute("SELECT * FROM sessions").fetchall()
@@ -208,7 +208,7 @@ def migrate(sqlite_path: str, postgres_url: str):
                 "INSERT INTO sessions (id, user_id, created_at, metadata) VALUES (%s, %s, %s, %s::jsonb) ON CONFLICT DO NOTHING",
                 (session["id"], session["user_id"], session["created_at"], session["metadata"] or '{}')
             )
-        
+
         # Migrate messages
         print("Migrating messages...")
         sqlite_messages = sqlite_conn.execute("SELECT * FROM messages").fetchall()
@@ -219,7 +219,7 @@ def migrate(sqlite_path: str, postgres_url: str):
                 (msg["id"], msg["session_id"], msg["role"], msg["content"],
                  msg["psych_update"], msg["created_at"], msg["semantic_processed_at"])
             )
-        
+
         # Migrate semantic insights
         print("Migrating semantic insights...")
         sqlite_insights = sqlite_conn.execute("SELECT * FROM semantic_insights").fetchall()
@@ -230,9 +230,9 @@ def migrate(sqlite_path: str, postgres_url: str):
                 (insight["id"], insight["user_id"], insight["source_message_id"],
                  insight["assertion"], insight["confidence"], insight["created_at"])
             )
-        
+
         pg_conn.commit()
-    
+
     print("Migration complete!")
     sqlite_conn.close()
     pg_conn.close()
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     parser.add_argument("--sqlite", required=True, help="Path to SQLite database")
     parser.add_argument("--postgres", required=True, help="PostgreSQL connection URL")
     args = parser.parse_args()
-    
+
     migrate(args.sqlite, args.postgres)
 ```
 
