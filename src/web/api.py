@@ -12,21 +12,34 @@ from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-from src.core.emperor_brain import EmperorBrain
-from src.infrastructure.database import Database
-from src.infrastructure.vector_store import VectorStore
-from src.memory.condensation import CondensationManager
 from src.models.schemas import Session, Message, User
 from src.utils.config import load_config
 from src.utils.auth import get_user_id_from_token, optional_auth, security
 
 app = FastAPI(title="Stoic Emperor", docs_url="/api/docs")
 
-config = load_config()
-db = Database(config["database"]["url"])
-vectors = VectorStore(config["database"]["url"])
-brain = EmperorBrain(config=config)
-condensation = CondensationManager(db, config)
+_state = {"initialized": False, "config": {}, "db": None, "vectors": None, "brain": None, "condensation": None}
+
+
+def _init():
+    if _state["initialized"]:
+        return
+    from src.core.emperor_brain import EmperorBrain
+    from src.infrastructure.database import Database
+    from src.infrastructure.vector_store import VectorStore
+    from src.memory.condensation import CondensationManager
+
+    _state["config"] = load_config()
+    _state["db"] = Database(_state["config"]["database"]["url"])
+    _state["vectors"] = VectorStore(_state["config"]["database"]["url"])
+    _state["brain"] = EmperorBrain(config=_state["config"])
+    _state["condensation"] = CondensationManager(_state["db"], _state["config"])
+    _state["initialized"] = True
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEFAULT_USER_ID = "default_user"
@@ -135,13 +148,15 @@ async def get_config():
 
 @app.get("/api/user", response_model=UserInfo)
 async def get_user(user_id: str = Depends(get_current_user_id)):
-    user = db.get_or_create_user(user_id)
+    _init()
+    user = _state["db"].get_or_create_user(user_id)
     return UserInfo(id=user.id, name=user.name, created_at=user.created_at)
 
 
 @app.put("/api/user/name", response_model=UserInfo)
 async def update_user_name(request: UpdateNameRequest, user_id: str = Depends(get_current_user_id)):
-    user = db.update_user_name(user_id, request.name)
+    _init()
+    user = _state["db"].update_user_name(user_id, request.name)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return UserInfo(id=user.id, name=user.name, created_at=user.created_at)
@@ -149,6 +164,9 @@ async def update_user_name(request: UpdateNameRequest, user_id: str = Depends(ge
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)):
+    _init()
+    db = _state["db"]
+    brain = _state["brain"]
     user = db.get_or_create_user(user_id)
 
     if request.session_id:
@@ -193,6 +211,8 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
 
 @app.post("/api/sessions", response_model=SessionInfo)
 async def create_session(user_id: str = Depends(get_current_user_id)):
+    _init()
+    db = _state["db"]
     user = db.get_or_create_user(user_id)
     session = Session(user_id=user.id)
     db.create_session(session)
@@ -201,6 +221,8 @@ async def create_session(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/api/sessions", response_model=list[SessionInfo])
 async def list_sessions(user_id: str = Depends(get_current_user_id)):
+    _init()
+    db = _state["db"]
     user = db.get_or_create_user(user_id)
     rows = db.get_user_sessions_with_counts(user.id)
     return [
@@ -215,6 +237,8 @@ async def list_sessions(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/api/sessions/{session_id}/messages", response_model=list[MessageInfo])
 async def get_session_messages(session_id: str):
+    _init()
+    db = _state["db"]
     session = db.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -228,6 +252,8 @@ async def get_session_messages(session_id: str):
 
 @app.get("/api/profile", response_model=Optional[ProfileInfo])
 async def get_profile(user_id: str = Depends(get_current_user_id)):
+    _init()
+    db = _state["db"]
     user = db.get_or_create_user(user_id)
     profile = db.get_latest_profile(user.id)
     if not profile:
@@ -255,6 +281,9 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/api/analysis/status", response_model=AnalysisStatus)
 async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
+    _init()
+    db = _state["db"]
+    condensation = _state["condensation"]
     user = db.get_or_create_user(user_id)
     uncondensed = condensation.get_uncondensed_messages(user.id)
     uncondensed_tokens = sum(condensation.estimate_tokens(m.content) for m in uncondensed)
@@ -271,7 +300,7 @@ async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
 
 def _maybe_condense_and_analyze(user_id: str) -> None:
     try:
-        did_condense = condensation.maybe_condense(user_id, verbose=False)
+        did_condense = _state["condensation"].maybe_condense(user_id, verbose=False)
         if did_condense:
             _maybe_update_profile(user_id)
     except Exception:
@@ -279,6 +308,8 @@ def _maybe_condense_and_analyze(user_id: str) -> None:
 
 
 def _maybe_update_profile(user_id: str) -> None:
+    config = _state["config"]
+    db = _state["db"]
     min_summaries = config.get("aegean_consensus", {}).get("min_summaries_for_profile", 3)
     summaries = db.get_condensed_summaries(user_id)
     if len(summaries) < min_summaries:
@@ -302,6 +333,8 @@ def _maybe_update_profile(user_id: str) -> None:
 
 
 def _retrieve_context(user_message: str, user_id: str) -> dict:
+    brain = _state["brain"]
+    vectors = _state["vectors"]
     context = {"stoic": [], "psych": [], "insights": [], "episodic": []}
 
     try:
