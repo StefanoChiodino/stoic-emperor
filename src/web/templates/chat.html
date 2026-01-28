@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Stoic Emperor{% endblock %}
+
+{% block content %}
+<div class="p-6 border-b border-white/10 bg-black/20">
+    <h2 class="text-xl text-gold-500">Marcus Aurelius</h2>
+    <p class="text-sm text-gray-500 mt-1">Stoic philosopher and Roman Emperor. Share your thoughts.</p>
+</div>
+
+<div id="messages" class="flex-1 overflow-y-auto p-8 space-y-6">
+    <div class="text-center py-20 text-gray-500">
+        <h3 class="text-2xl text-gray-400 mb-2">Begin Your Dialogue</h3>
+        <p>Share what's on your mind with the Stoic Emperor.</p>
+    </div>
+</div>
+
+<div id="loading" class="hidden max-w-3xl mx-auto mb-6 p-5 bg-gold-500/10 border-l-4 border-gold-500 rounded-xl">
+    <div class="text-xs uppercase tracking-wide text-gold-500 mb-2">Marcus Aurelius</div>
+    <div class="loading-dots flex gap-1.5">
+        <span class="w-2 h-2 bg-gold-500 rounded-full"></span>
+        <span class="w-2 h-2 bg-gold-500 rounded-full"></span>
+        <span class="w-2 h-2 bg-gold-500 rounded-full"></span>
+    </div>
+</div>
+
+<div class="p-6 bg-black/30 border-t border-white/10">
+    <form id="chat-form" class="max-w-3xl mx-auto flex gap-3" hx-post="/api/chat" hx-target="#messages" hx-swap="beforeend" hx-on::before-request="showLoading()" hx-on::after-request="hideLoading()">
+        <textarea
+            id="message-input"
+            name="message"
+            placeholder="Share your thoughts..."
+            rows="1"
+            class="flex-1 px-4 py-4 bg-white/5 border border-white/15 rounded-xl text-gray-200 resize-none focus:outline-none focus:border-gold-500 placeholder-gray-600"
+            onkeydown="handleKeydown(event)"
+            oninput="autoResize(this)"
+        ></textarea>
+        <button type="submit" class="px-6 py-4 bg-gold-500 text-dark-800 font-semibold rounded-xl hover:bg-gold-400 transition self-end disabled:opacity-50 disabled:cursor-not-allowed">
+            Send
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentSessionId = null;
+
+    function showLoading() {
+        document.getElementById('loading').classList.remove('hidden');
+    }
+
+    function hideLoading() {
+        document.getElementById('loading').classList.add('hidden');
+    }
+
+    function handleKeydown(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            document.getElementById('chat-form').requestSubmit();
+        }
+    }
+
+    function autoResize(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+
+    function addMessage(role, content) {
+        const container = document.getElementById('messages');
+        const emptyState = container.querySelector('.text-center');
+        if (emptyState) emptyState.remove();
+
+        const roleClass = role === 'user'
+            ? 'bg-white/5 ml-20'
+            : 'bg-gold-500/10 border-l-4 border-gold-500';
+        const labelClass = role === 'user' ? 'text-gray-500' : 'text-gold-500';
+        const label = role === 'user' ? 'You' : 'Marcus Aurelius';
+
+        const div = document.createElement('div');
+        div.className = `max-w-3xl mx-auto p-5 rounded-xl ${roleClass}`;
+        div.innerHTML = `
+            <div class="text-xs uppercase tracking-wide ${labelClass} mb-2">${label}</div>
+            <div class="leading-relaxed whitespace-pre-wrap">${escapeHtml(content)}</div>
+        `;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.getElementById('chat-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('message-input');
+        const message = input.value.trim();
+        if (!message) return;
+
+        input.value = '';
+        input.style.height = 'auto';
+        addMessage('user', message);
+        showLoading();
+
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...headers },
+                body: JSON.stringify({ message, session_id: currentSessionId })
+            });
+            const data = await response.json();
+            currentSessionId = data.session_id;
+            addMessage('emperor', data.response);
+        } catch (error) {
+            console.error('Chat error:', error);
+            addMessage('emperor', 'I apologize, but I am unable to respond at this moment.');
+        } finally {
+            hideLoading();
+        }
+    });
+
+    async function loadLatestSession() {
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/sessions', { headers });
+            if (!response.ok) return;
+
+            const sessions = await response.json();
+            if (sessions.length === 0) return;
+
+            const latest = sessions[0];
+            currentSessionId = latest.id;
+
+            if (latest.message_count > 0) {
+                const msgResponse = await fetch(`/api/sessions/${latest.id}/messages`, { headers });
+                if (msgResponse.ok) {
+                    const messages = await msgResponse.json();
+                    const container = document.getElementById('messages');
+                    container.innerHTML = '';
+                    messages.forEach(m => addMessage(m.role, m.content));
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load session:', error);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await new Promise(r => setTimeout(r, 100));
+        await loadLatestSession();
+    });
+</script>
+{% endblock %}

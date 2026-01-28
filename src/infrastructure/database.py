@@ -1,350 +1,157 @@
-import json
 import os
-import sqlite3
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
-from urllib.parse import urlparse
-from pathlib import Path
+
+from sqlalchemy import create_engine, String, Integer, Float, DateTime, Text, ForeignKey, JSON, Index, select, func, desc
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session as SASession
 
 from src.models.schemas import User, Session, Message, SemanticInsight, PsychUpdate, CondensedSummary
 
-SCHEMA_VERSION = 4
 
-SQLITE_MIGRATIONS = {
-    1: """
-        CREATE TABLE IF NOT EXISTS schema_version (
-            version INTEGER PRIMARY KEY,
-            applied_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
+class Base(DeclarativeBase):
+    pass
 
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
 
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            metadata TEXT
-        );
+class UserModel(Base):
+    __tablename__ = "users"
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            session_id TEXT REFERENCES sessions(id),
-            role TEXT,
-            content TEXT,
-            psych_update TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            semantic_processed_at TEXT
-        );
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-        CREATE TABLE IF NOT EXISTS profiles (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            version INTEGER,
-            content TEXT,
-            consensus_log TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
 
-        CREATE TABLE IF NOT EXISTS semantic_insights (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            source_message_id TEXT REFERENCES messages(id),
-            assertion TEXT,
-            confidence REAL,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
+class SessionModel(Base):
+    __tablename__ = "sessions"
 
-        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-        CREATE INDEX IF NOT EXISTS idx_messages_semantic ON messages(semantic_processed_at);
-        CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-        CREATE INDEX IF NOT EXISTS idx_insights_user ON semantic_insights(user_id);
-    """,
-    2: """
-        CREATE TABLE IF NOT EXISTS condensed_summaries (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            level INTEGER,
-            content TEXT,
-            period_start TEXT,
-            period_end TEXT,
-            source_message_count INTEGER,
-            source_word_count INTEGER,
-            source_summary_ids TEXT,
-            consensus_log TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict)
 
-        CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
-        CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
-    """,
-    3: "",
-    4: "",
-}
+    __table_args__ = (Index("idx_sessions_user", "user_id"),)
 
-POSTGRES_MIGRATIONS = {
-    1: """
-        CREATE TABLE IF NOT EXISTS schema_version (
-            version INTEGER PRIMARY KEY,
-            applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
 
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+class MessageModel(Base):
+    __tablename__ = "messages"
 
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            metadata JSONB
-        );
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String, ForeignKey("sessions.id"))
+    role: Mapped[str] = mapped_column(String)
+    content: Mapped[str] = mapped_column(Text)
+    psych_update: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    semantic_processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            session_id TEXT REFERENCES sessions(id),
-            role TEXT,
-            content TEXT,
-            psych_update JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            semantic_processed_at TIMESTAMP
-        );
+    __table_args__ = (
+        Index("idx_messages_session", "session_id"),
+        Index("idx_messages_semantic", "semantic_processed_at"),
+    )
 
-        CREATE TABLE IF NOT EXISTS profiles (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            version INTEGER,
-            content TEXT,
-            consensus_log JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
 
-        CREATE TABLE IF NOT EXISTS semantic_insights (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            source_message_id TEXT REFERENCES messages(id),
-            assertion TEXT,
-            confidence REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+class ProfileModel(Base):
+    __tablename__ = "profiles"
 
-        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-        CREATE INDEX IF NOT EXISTS idx_messages_semantic ON messages(semantic_processed_at);
-        CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-        CREATE INDEX IF NOT EXISTS idx_insights_user ON semantic_insights(user_id);
-    """,
-    2: """
-        CREATE TABLE IF NOT EXISTS condensed_summaries (
-            id TEXT PRIMARY KEY,
-            user_id TEXT REFERENCES users(id),
-            level INTEGER,
-            content TEXT,
-            period_start TIMESTAMP,
-            period_end TIMESTAMP,
-            source_message_count INTEGER,
-            source_word_count INTEGER,
-            source_summary_ids JSONB,
-            consensus_log JSONB,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
+    version: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    consensus_log: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-        CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
-        CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
-    """,
-    3: """
-        ALTER TABLE schema_version ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE semantic_insights ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE condensed_summaries ENABLE ROW LEVEL SECURITY;
-    """,
-    4: """
-        DO $$
-        DECLARE
-            has_supabase_auth BOOLEAN;
-        BEGIN
-            SELECT EXISTS (
-                SELECT 1 FROM pg_proc p
-                JOIN pg_namespace n ON p.pronamespace = n.oid
-                WHERE n.nspname = 'auth' AND p.proname = 'uid'
-            ) INTO has_supabase_auth;
 
-            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_episodic') THEN
-                ALTER TABLE vector_episodic ENABLE ROW LEVEL SECURITY;
-                IF has_supabase_auth THEN
-                    DROP POLICY IF EXISTS vector_episodic_user_policy ON vector_episodic;
-                    CREATE POLICY vector_episodic_user_policy ON vector_episodic
-                        FOR ALL USING (metadata->>'user_id' = auth.uid()::text)
-                        WITH CHECK (metadata->>'user_id' = auth.uid()::text);
-                END IF;
-            END IF;
+class SemanticInsightModel(Base):
+    __tablename__ = "semantic_insights"
 
-            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_semantic') THEN
-                ALTER TABLE vector_semantic ENABLE ROW LEVEL SECURITY;
-                IF has_supabase_auth THEN
-                    DROP POLICY IF EXISTS vector_semantic_user_policy ON vector_semantic;
-                    CREATE POLICY vector_semantic_user_policy ON vector_semantic
-                        FOR ALL USING (metadata->>'user_id' = auth.uid()::text)
-                        WITH CHECK (metadata->>'user_id' = auth.uid()::text);
-                END IF;
-            END IF;
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
+    source_message_id: Mapped[str] = mapped_column(String, ForeignKey("messages.id"))
+    assertion: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
-            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_stoic_wisdom') THEN
-                ALTER TABLE vector_stoic_wisdom ENABLE ROW LEVEL SECURITY;
-                IF has_supabase_auth THEN
-                    DROP POLICY IF EXISTS vector_stoic_wisdom_read_policy ON vector_stoic_wisdom;
-                    CREATE POLICY vector_stoic_wisdom_read_policy ON vector_stoic_wisdom
-                        FOR SELECT USING (true);
-                END IF;
-            END IF;
+    __table_args__ = (Index("idx_insights_user", "user_id"),)
 
-            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_psychoanalysis') THEN
-                ALTER TABLE vector_psychoanalysis ENABLE ROW LEVEL SECURITY;
-                IF has_supabase_auth THEN
-                    DROP POLICY IF EXISTS vector_psychoanalysis_read_policy ON vector_psychoanalysis;
-                    CREATE POLICY vector_psychoanalysis_read_policy ON vector_psychoanalysis
-                        FOR SELECT USING (true);
-                END IF;
-            END IF;
-        END $$;
-    """,
-}
+
+class CondensedSummaryModel(Base):
+    __tablename__ = "condensed_summaries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
+    level: Mapped[int] = mapped_column(Integer)
+    content: Mapped[str] = mapped_column(Text)
+    period_start: Mapped[datetime] = mapped_column(DateTime)
+    period_end: Mapped[datetime] = mapped_column(DateTime)
+    source_message_count: Mapped[int] = mapped_column(Integer)
+    source_word_count: Mapped[int] = mapped_column(Integer)
+    source_summary_ids: Mapped[Optional[list]] = mapped_column(JSON, default=list)
+    consensus_log: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        Index("idx_summaries_user_level", "user_id", "level"),
+        Index("idx_summaries_period", "user_id", "period_end"),
+    )
+
+
+class SchemaVersionModel(Base):
+    __tablename__ = "schema_version"
+
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class Database:
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db")
 
-        parsed = urlparse(self.database_url)
-        self.is_postgres = parsed.scheme in ("postgresql", "postgres")
+        if not self.database_url.startswith(("sqlite", "postgresql", "postgres")):
+            self.database_url = f"sqlite:///{self.database_url}"
 
-        if self.is_postgres:
-            import psycopg2
-            from psycopg2 import pool as pg_pool
-            self._psycopg2 = psycopg2
-            self._pool = pg_pool.ThreadedConnectionPool(
-                minconn=2,
-                maxconn=10,
-                dsn=self.database_url
-            )
-        else:
+        if self.database_url.startswith("sqlite"):
+            from pathlib import Path
             db_path = self.database_url.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-            self._sqlite_path = db_path
 
-        self._run_migrations()
+        is_sqlite = self.database_url.startswith("sqlite")
+        self.engine = create_engine(
+            self.database_url,
+            pool_pre_ping=True,
+            **({"pool_size": 5, "max_overflow": 10} if not is_sqlite else {}),
+        )
+        self._session_factory = sessionmaker(bind=self.engine)
+
+        Base.metadata.create_all(self.engine)
+        self._ensure_schema_version()
+
+    def _ensure_schema_version(self) -> None:
+        with self._session() as session:
+            existing = session.get(SchemaVersionModel, 4)
+            if not existing:
+                session.merge(SchemaVersionModel(version=4))
 
     @contextmanager
-    def _connection(self):
-        if self.is_postgres:
-            from psycopg2.extras import RealDictCursor
-            conn = self._pool.getconn()
-            try:
-                yield conn
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
-            finally:
-                self._pool.putconn(conn)
-        else:
-            conn = sqlite3.connect(self._sqlite_path)
-            conn.row_factory = sqlite3.Row
-            try:
-                yield conn
-                conn.commit()
-            finally:
-                conn.close()
-
-    def _run_migrations(self) -> None:
-        migrations = POSTGRES_MIGRATIONS if self.is_postgres else SQLITE_MIGRATIONS
-
-        with self._connection() as conn:
-            if self.is_postgres:
-                from psycopg2.extras import RealDictCursor
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
-                cursor.execute(
-                    "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='schema_version')"
-                )
-                table_exists = cursor.fetchone()["exists"]
-            else:
-                cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
-                table_exists = cursor.fetchone() is not None
-
-            if not table_exists:
-                current_version = 0
-            else:
-                cursor.execute("SELECT MAX(version) as max FROM schema_version")
-                result = cursor.fetchone()
-                if self.is_postgres:
-                    current_version = result["max"] if result and result["max"] else 0
-                else:
-                    current_version = result[0] if result and result[0] else 0
-
-            for version in range(current_version + 1, SCHEMA_VERSION + 1):
-                if version in migrations:
-                    if self.is_postgres:
-                        cursor.execute(migrations[version])
-                        cursor.execute("INSERT INTO schema_version (version) VALUES (%s)", (version,))
-                    else:
-                        cursor.executescript(migrations[version])
-                        cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-
-            cursor.close()
-
-    def _placeholder(self) -> str:
-        return "%s" if self.is_postgres else "?"
-
-    def _get_cursor(self, conn, dict_cursor: bool = False):
-        if self.is_postgres and dict_cursor:
-            from psycopg2.extras import RealDictCursor
-            return conn.cursor(cursor_factory=RealDictCursor)
-        return conn.cursor()
-
-    def _row_to_dict(self, row) -> Optional[Dict[str, Any]]:
-        if row is None:
-            return None
-        if self.is_postgres:
-            return dict(row)
-        return dict(row)
-
-    def _parse_timestamp(self, value) -> Optional[datetime]:
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value
-        return datetime.fromisoformat(value)
+    def _session(self):
+        session = self._session_factory()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def create_user(self, user: User) -> User:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                f"INSERT INTO users (id, created_at) VALUES ({ph}, {ph})",
-                (user.id, user.created_at.isoformat() if not self.is_postgres else user.created_at)
-            )
-            cursor.close()
+        with self._session() as session:
+            model = UserModel(id=user.id, created_at=user.created_at)
+            session.add(model)
         return user
 
     def get_user(self, user_id: str) -> Optional[User]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(f"SELECT * FROM users WHERE id = {ph}", (user_id,))
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
-                return User(
-                    id=row["id"],
-                    created_at=self._parse_timestamp(row["created_at"])
-                )
+        with self._session() as session:
+            model = session.get(UserModel, user_id)
+            if model:
+                return User(id=model.id, created_at=model.created_at)
         return None
 
     def get_or_create_user(self, user_id: str) -> User:
@@ -354,348 +161,250 @@ class Database:
             self.create_user(user)
         return user
 
-    def create_session(self, session: Session) -> Session:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                f"INSERT INTO sessions (id, user_id, created_at, metadata) VALUES ({ph}, {ph}, {ph}, {ph})",
-                (session.id, session.user_id,
-                 session.created_at.isoformat() if not self.is_postgres else session.created_at,
-                 json.dumps(session.metadata))
+    def create_session(self, session_obj: Session) -> Session:
+        with self._session() as session:
+            model = SessionModel(
+                id=session_obj.id,
+                user_id=session_obj.user_id,
+                created_at=session_obj.created_at,
+                metadata_=session_obj.metadata,
             )
-            cursor.close()
-        return session
-
-    def _parse_metadata(self, value) -> dict:
-        if value is None:
-            return {}
-        if isinstance(value, dict):
-            return value
-        return json.loads(value)
+            session.add(model)
+        return session_obj
 
     def get_session(self, session_id: str) -> Optional[Session]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(f"SELECT * FROM sessions WHERE id = {ph}", (session_id,))
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
+        with self._session() as session:
+            model = session.get(SessionModel, session_id)
+            if model:
                 return Session(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    created_at=self._parse_timestamp(row["created_at"]),
-                    metadata=self._parse_metadata(row["metadata"])
+                    id=model.id,
+                    user_id=model.user_id,
+                    created_at=model.created_at,
+                    metadata=model.metadata_ or {},
                 )
         return None
 
     def get_latest_session(self, user_id: str) -> Optional[Session]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"SELECT * FROM sessions WHERE user_id = {ph} ORDER BY created_at DESC LIMIT 1",
-                (user_id,)
+        with self._session() as session:
+            stmt = (
+                select(SessionModel)
+                .where(SessionModel.user_id == user_id)
+                .order_by(desc(SessionModel.created_at))
+                .limit(1)
             )
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
+            model = session.scalars(stmt).first()
+            if model:
                 return Session(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    created_at=self._parse_timestamp(row["created_at"]),
-                    metadata=self._parse_metadata(row["metadata"])
+                    id=model.id,
+                    user_id=model.user_id,
+                    created_at=model.created_at,
+                    metadata=model.metadata_ or {},
                 )
         return None
 
     def save_message(self, message: Message) -> Message:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = conn.cursor()
+        with self._session() as session:
             psych_dict = message.psych_update.model_dump() if message.psych_update else None
-            created = message.created_at.isoformat() if not self.is_postgres else message.created_at
-            semantic = message.semantic_processed_at.isoformat() if message.semantic_processed_at and not self.is_postgres else message.semantic_processed_at
-            cursor.execute(
-                f"""INSERT INTO messages
-                   (id, session_id, role, content, psych_update, created_at, semantic_processed_at)
-                   VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
-                (message.id, message.session_id, message.role, message.content,
-                 json.dumps(psych_dict) if psych_dict else None, created, semantic)
+            model = MessageModel(
+                id=message.id,
+                session_id=message.session_id,
+                role=message.role,
+                content=message.content,
+                psych_update=psych_dict,
+                created_at=message.created_at,
+                semantic_processed_at=message.semantic_processed_at,
             )
-            cursor.close()
+            session.add(model)
         return message
 
     def get_session_messages(self, session_id: str) -> List[Message]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"SELECT * FROM messages WHERE session_id = {ph} ORDER BY created_at",
-                (session_id,)
+        with self._session() as session:
+            stmt = (
+                select(MessageModel)
+                .where(MessageModel.session_id == session_id)
+                .order_by(MessageModel.created_at)
             )
-            rows = cursor.fetchall()
-            cursor.close()
-            return [self._row_to_message(row) for row in rows]
+            models = session.scalars(stmt).all()
+            return [self._model_to_message(m) for m in models]
 
     def get_unprocessed_messages(self, user_id: str) -> List[Message]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"""SELECT m.* FROM messages m
-                   JOIN sessions s ON m.session_id = s.id
-                   WHERE s.user_id = {ph} AND m.semantic_processed_at IS NULL AND m.psych_update IS NOT NULL
-                   ORDER BY m.created_at""",
-                (user_id,)
+        with self._session() as session:
+            stmt = (
+                select(MessageModel)
+                .join(SessionModel, MessageModel.session_id == SessionModel.id)
+                .where(SessionModel.user_id == user_id)
+                .where(MessageModel.semantic_processed_at.is_(None))
+                .where(MessageModel.psych_update.isnot(None))
+                .order_by(MessageModel.created_at)
             )
-            rows = cursor.fetchall()
-            cursor.close()
-            return [self._row_to_message(row) for row in rows]
+            models = session.scalars(stmt).all()
+            return [self._model_to_message(m) for m in models]
 
     def mark_message_processed(self, message_id: str) -> None:
-        ph = self._placeholder()
-        now = datetime.now().isoformat() if not self.is_postgres else datetime.now()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                f"UPDATE messages SET semantic_processed_at = {ph} WHERE id = {ph}",
-                (now, message_id)
-            )
-            cursor.close()
+        with self._session() as session:
+            model = session.get(MessageModel, message_id)
+            if model:
+                model.semantic_processed_at = datetime.now()
 
     def save_semantic_insight(self, insight: SemanticInsight) -> SemanticInsight:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            created = insight.created_at.isoformat() if not self.is_postgres else insight.created_at
-            cursor.execute(
-                f"""INSERT INTO semantic_insights
-                   (id, user_id, source_message_id, assertion, confidence, created_at)
-                   VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
-                (insight.id, insight.user_id, insight.source_message_id,
-                 insight.assertion, insight.confidence, created)
+        with self._session() as session:
+            model = SemanticInsightModel(
+                id=insight.id,
+                user_id=insight.user_id,
+                source_message_id=insight.source_message_id,
+                assertion=insight.assertion,
+                confidence=insight.confidence,
+                created_at=insight.created_at,
             )
-            cursor.close()
+            session.add(model)
         return insight
 
     def get_user_insights(self, user_id: str) -> List[SemanticInsight]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"SELECT * FROM semantic_insights WHERE user_id = {ph} ORDER BY created_at DESC",
-                (user_id,)
+        with self._session() as session:
+            stmt = (
+                select(SemanticInsightModel)
+                .where(SemanticInsightModel.user_id == user_id)
+                .order_by(desc(SemanticInsightModel.created_at))
             )
-            rows = cursor.fetchall()
-            cursor.close()
+            models = session.scalars(stmt).all()
             return [
                 SemanticInsight(
-                    id=row["id"],
-                    user_id=row["user_id"],
-                    source_message_id=row["source_message_id"],
-                    assertion=row["assertion"],
-                    confidence=row["confidence"],
-                    created_at=self._parse_timestamp(row["created_at"])
+                    id=m.id,
+                    user_id=m.user_id,
+                    source_message_id=m.source_message_id,
+                    assertion=m.assertion,
+                    confidence=m.confidence,
+                    created_at=m.created_at,
                 )
-                for row in rows
+                for m in models
             ]
 
     def count_sessions_since_last_analysis(self, user_id: str) -> int:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"SELECT MAX(created_at) as last FROM profiles WHERE user_id = {ph}",
-                (user_id,)
+        with self._session() as session:
+            last_profile_stmt = (
+                select(func.max(ProfileModel.created_at))
+                .where(ProfileModel.user_id == user_id)
             )
-            last_profile = cursor.fetchone()
+            last_profile_time = session.scalar(last_profile_stmt)
 
-            if last_profile and last_profile["last"]:
-                cursor.execute(
-                    f"SELECT COUNT(*) as cnt FROM sessions WHERE user_id = {ph} AND created_at > {ph}",
-                    (user_id, last_profile["last"])
+            if last_profile_time:
+                count_stmt = (
+                    select(func.count())
+                    .select_from(SessionModel)
+                    .where(SessionModel.user_id == user_id)
+                    .where(SessionModel.created_at > last_profile_time)
                 )
-                count = cursor.fetchone()
             else:
-                cursor.execute(
-                    f"SELECT COUNT(*) as cnt FROM sessions WHERE user_id = {ph}",
-                    (user_id,)
+                count_stmt = (
+                    select(func.count())
+                    .select_from(SessionModel)
+                    .where(SessionModel.user_id == user_id)
                 )
-                count = cursor.fetchone()
-
-            cursor.close()
-            return count["cnt"] if count else 0
+            return session.scalar(count_stmt) or 0
 
     def get_latest_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"""SELECT content, version, created_at, consensus_log
-                   FROM profiles WHERE user_id = {ph} ORDER BY version DESC LIMIT 1""",
-                (user_id,)
+        with self._session() as session:
+            stmt = (
+                select(ProfileModel)
+                .where(ProfileModel.user_id == user_id)
+                .order_by(desc(ProfileModel.version))
+                .limit(1)
             )
-            row = cursor.fetchone()
-            cursor.close()
-            if row:
+            model = session.scalars(stmt).first()
+            if model:
                 return {
-                    "content": row["content"],
-                    "version": row["version"],
-                    "created_at": row["created_at"],
-                    "consensus_log": self._parse_metadata(row["consensus_log"])
+                    "content": model.content,
+                    "version": model.version,
+                    "created_at": model.created_at,
+                    "consensus_log": model.consensus_log or {},
                 }
         return None
 
-    def _row_to_message(self, row) -> Message:
-        psych = None
-        psych_data = row["psych_update"]
-        if psych_data:
-            if isinstance(psych_data, str):
-                psych_data = json.loads(psych_data)
-            psych = PsychUpdate(**psych_data)
-        return Message(
-            id=row["id"],
-            session_id=row["session_id"],
-            role=row["role"],
-            content=row["content"],
-            psych_update=psych,
-            created_at=self._parse_timestamp(row["created_at"]),
-            semantic_processed_at=self._parse_timestamp(row["semantic_processed_at"])
-        )
-
     def save_condensed_summary(self, summary: CondensedSummary) -> CondensedSummary:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            if self.is_postgres:
-                ps, pe, ca = summary.period_start, summary.period_end, summary.created_at
-            else:
-                ps = summary.period_start.isoformat()
-                pe = summary.period_end.isoformat()
-                ca = summary.created_at.isoformat()
-            cursor.execute(
-                f"""INSERT INTO condensed_summaries
-                   (id, user_id, level, content, period_start, period_end,
-                    source_message_count, source_word_count, source_summary_ids,
-                    consensus_log, created_at)
-                   VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
-                (summary.id, summary.user_id, summary.level, summary.content,
-                 ps, pe, summary.source_message_count, summary.source_word_count,
-                 json.dumps(summary.source_summary_ids),
-                 json.dumps(summary.consensus_log) if summary.consensus_log else None, ca)
+        with self._session() as session:
+            model = CondensedSummaryModel(
+                id=summary.id,
+                user_id=summary.user_id,
+                level=summary.level,
+                content=summary.content,
+                period_start=summary.period_start,
+                period_end=summary.period_end,
+                source_message_count=summary.source_message_count,
+                source_word_count=summary.source_word_count,
+                source_summary_ids=summary.source_summary_ids,
+                consensus_log=summary.consensus_log,
+                created_at=summary.created_at,
             )
-            cursor.close()
+            session.add(model)
         return summary
 
     def get_condensed_summaries(self, user_id: str, level: Optional[int] = None) -> List[CondensedSummary]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
+        with self._session() as session:
+            stmt = select(CondensedSummaryModel).where(CondensedSummaryModel.user_id == user_id)
             if level is not None:
-                cursor.execute(
-                    f"""SELECT * FROM condensed_summaries
-                       WHERE user_id = {ph} AND level = {ph}
-                       ORDER BY period_start""",
-                    (user_id, level)
-                )
+                stmt = stmt.where(CondensedSummaryModel.level == level).order_by(CondensedSummaryModel.period_start)
             else:
-                cursor.execute(
-                    f"""SELECT * FROM condensed_summaries
-                       WHERE user_id = {ph}
-                       ORDER BY level, period_start""",
-                    (user_id,)
-                )
-            rows = cursor.fetchall()
-            cursor.close()
-            return [self._row_to_condensed_summary(row) for row in rows]
+                stmt = stmt.order_by(CondensedSummaryModel.level, CondensedSummaryModel.period_start)
+            models = session.scalars(stmt).all()
+            return [self._model_to_condensed_summary(m) for m in models]
 
     def get_messages_in_range(
         self,
         user_id: str,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
     ) -> List[Message]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            if not self.is_postgres:
-                start_date = start_date.isoformat() if start_date else None
-                end_date = end_date.isoformat() if end_date else None
-
-            if start_date and end_date:
-                cursor.execute(
-                    f"""SELECT m.* FROM messages m
-                       JOIN sessions s ON m.session_id = s.id
-                       WHERE s.user_id = {ph} AND m.created_at >= {ph} AND m.created_at <= {ph}
-                       ORDER BY m.created_at""",
-                    (user_id, start_date, end_date)
-                )
-            elif start_date:
-                cursor.execute(
-                    f"""SELECT m.* FROM messages m
-                       JOIN sessions s ON m.session_id = s.id
-                       WHERE s.user_id = {ph} AND m.created_at >= {ph}
-                       ORDER BY m.created_at""",
-                    (user_id, start_date)
-                )
-            elif end_date:
-                cursor.execute(
-                    f"""SELECT m.* FROM messages m
-                       JOIN sessions s ON m.session_id = s.id
-                       WHERE s.user_id = {ph} AND m.created_at <= {ph}
-                       ORDER BY m.created_at""",
-                    (user_id, end_date)
-                )
-            else:
-                cursor.execute(
-                    f"""SELECT m.* FROM messages m
-                       JOIN sessions s ON m.session_id = s.id
-                       WHERE s.user_id = {ph}
-                       ORDER BY m.created_at""",
-                    (user_id,)
-                )
-            rows = cursor.fetchall()
-            cursor.close()
-            return [self._row_to_message(row) for row in rows]
+        with self._session() as session:
+            stmt = (
+                select(MessageModel)
+                .join(SessionModel, MessageModel.session_id == SessionModel.id)
+                .where(SessionModel.user_id == user_id)
+            )
+            if start_date:
+                stmt = stmt.where(MessageModel.created_at >= start_date)
+            if end_date:
+                stmt = stmt.where(MessageModel.created_at <= end_date)
+            stmt = stmt.order_by(MessageModel.created_at)
+            models = session.scalars(stmt).all()
+            return [self._model_to_message(m) for m in models]
 
     def get_recent_messages(self, user_id: str, limit: int = 20) -> List[Message]:
-        ph = self._placeholder()
-        with self._connection() as conn:
-            cursor = self._get_cursor(conn, dict_cursor=True)
-            cursor.execute(
-                f"""SELECT m.* FROM messages m
-                   JOIN sessions s ON m.session_id = s.id
-                   WHERE s.user_id = {ph}
-                   ORDER BY m.created_at DESC
-                   LIMIT {ph}""",
-                (user_id, limit)
+        with self._session() as session:
+            stmt = (
+                select(MessageModel)
+                .join(SessionModel, MessageModel.session_id == SessionModel.id)
+                .where(SessionModel.user_id == user_id)
+                .order_by(desc(MessageModel.created_at))
+                .limit(limit)
             )
-            rows = cursor.fetchall()
-            cursor.close()
-            return list(reversed([self._row_to_message(row) for row in rows]))
+            models = session.scalars(stmt).all()
+            return list(reversed([self._model_to_message(m) for m in models]))
 
-    def _row_to_condensed_summary(self, row) -> CondensedSummary:
-        source_ids = row["source_summary_ids"]
-        if isinstance(source_ids, str):
-            source_ids = json.loads(source_ids)
-        elif source_ids is None:
-            source_ids = []
+    def _model_to_message(self, model: MessageModel) -> Message:
+        psych = None
+        if model.psych_update:
+            psych = PsychUpdate(**model.psych_update)
+        return Message(
+            id=model.id,
+            session_id=model.session_id,
+            role=model.role,
+            content=model.content,
+            psych_update=psych,
+            created_at=model.created_at,
+            semantic_processed_at=model.semantic_processed_at,
+        )
 
-        consensus = row["consensus_log"]
-        if isinstance(consensus, str):
-            consensus = json.loads(consensus)
-
+    def _model_to_condensed_summary(self, model: CondensedSummaryModel) -> CondensedSummary:
         return CondensedSummary(
-            id=row["id"],
-            user_id=row["user_id"],
-            level=row["level"],
-            content=row["content"],
-            period_start=self._parse_timestamp(row["period_start"]),
-            period_end=self._parse_timestamp(row["period_end"]),
-            source_message_count=row["source_message_count"],
-            source_word_count=row["source_word_count"],
-            source_summary_ids=source_ids,
-            consensus_log=consensus,
-            created_at=self._parse_timestamp(row["created_at"])
+            id=model.id,
+            user_id=model.user_id,
+            level=model.level,
+            content=model.content,
+            period_start=model.period_start,
+            period_end=model.period_end,
+            source_message_count=model.source_message_count,
+            source_word_count=model.source_word_count,
+            source_summary_ids=model.source_summary_ids or [],
+            consensus_log=model.consensus_log,
+            created_at=model.created_at,
         )

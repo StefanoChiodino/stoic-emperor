@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis - Stoic Emperor{% endblock %}
+
+{% block content %}
+<div class="p-6 border-b border-white/10 bg-black/20">
+    <h2 class="text-xl text-gold-500">Psychological Profile</h2>
+    <p class="text-sm text-gray-500 mt-1">Deep analysis based on your conversations.</p>
+</div>
+
+<div class="flex-1 overflow-y-auto p-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="mb-6 p-4 bg-black/20 rounded-lg border border-white/10">
+            <div id="analysis-status" class="text-sm text-gray-400 mb-3">Loading status...</div>
+            <button id="analyze-btn" onclick="runAnalysis()"
+                    class="w-full px-4 py-3 bg-gold-500/15 border border-gold-500/30 text-gold-500 rounded-lg hover:bg-gold-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                Run Analysis
+            </button>
+        </div>
+
+        <div id="profile-content">
+            <div class="text-center py-20 text-gray-500">
+                <h3 class="text-xl text-gray-400 mb-2">No profile yet</h3>
+                <p>Chat with Marcus Aurelius first, then run analysis to generate your psychological profile.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadAnalysisStatus() {
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/analysis/status', { headers });
+            const status = await response.json();
+            const statusEl = document.getElementById('analysis-status');
+            const btn = document.getElementById('analyze-btn');
+
+            if (status.can_analyze) {
+                statusEl.innerHTML = `<span class="text-green-400">${status.sessions_since_analysis} sessions ready for analysis</span>`;
+                btn.disabled = false;
+            } else {
+                statusEl.innerHTML = `${status.sessions_since_analysis}/${status.threshold} sessions until next analysis`;
+                btn.disabled = !status.has_profile && status.sessions_since_analysis < status.threshold;
+            }
+        } catch (error) {
+            console.error('Failed to load analysis status:', error);
+        }
+    }
+
+    async function loadProfile() {
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/profile', { headers });
+            const container = document.getElementById('profile-content');
+
+            if (response.status === 200) {
+                const profile = await response.json();
+                if (profile) {
+                    const consensusHtml = profile.consensus_reached !== null
+                        ? `<span class="${profile.consensus_reached ? 'text-green-400' : 'text-orange-400'}">${profile.consensus_reached ? '✓ Consensus' : '⚠ No consensus'}</span>`
+                        : '';
+                    const stabilityHtml = profile.stability_score !== null
+                        ? ` • Stability: ${profile.stability_score.toFixed(2)}`
+                        : '';
+
+                    container.innerHTML = `
+                        <div class="mb-4 p-3 bg-black/30 rounded-lg text-xs text-gray-500">
+                            Version ${profile.version} • ${formatDate(profile.created_at)}
+                            ${consensusHtml}${stabilityHtml}
+                        </div>
+                        <div class="prose prose-invert prose-gold max-w-none">
+                            ${renderMarkdown(profile.content)}
+                        </div>
+                    `;
+                    return;
+                }
+            }
+            container.innerHTML = `
+                <div class="text-center py-20 text-gray-500">
+                    <h3 class="text-xl text-gray-400 mb-2">No profile yet</h3>
+                    <p>Chat with Marcus Aurelius first, then run analysis.</p>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Failed to load profile:', error);
+        }
+    }
+
+    async function runAnalysis() {
+        const btn = document.getElementById('analyze-btn');
+        btn.disabled = true;
+        btn.textContent = 'Analyzing...';
+
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/analyze', { method: 'POST', headers });
+            if (response.ok) {
+                await loadProfile();
+                await loadAnalysisStatus();
+            } else {
+                const error = await response.json();
+                alert('Analysis failed: ' + (error.detail || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Failed to run analysis:', error);
+            alert('Analysis failed. Check console for details.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Run Analysis';
+        }
+    }
+
+    function renderMarkdown(text) {
+        return text
+            .replace(/^### (.*$)/gm, '<h3 class="text-lg text-gold-500 mt-6 mb-2">$1</h3>')
+            .replace(/^## (.*$)/gm, '<h2 class="text-xl text-gold-500 mt-6 mb-3">$1</h2>')
+            .replace(/^# (.*$)/gm, '<h1 class="text-2xl text-gold-500 mt-6 mb-3">$1</h1>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/^- (.*$)/gm, '<li class="ml-4">$1</li>')
+            .replace(/\n\n/g, '</p><p class="mb-3">')
+            .replace(/^(?!<[hlo])/gm, '<p class="mb-3">')
+            .replace(/<p class="mb-3"><\/p>/g, '');
+    }
+
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric'
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await new Promise(r => setTimeout(r, 100));
+        await loadAnalysisStatus();
+        await loadProfile();
+    });
+</script>
+{% endblock %}

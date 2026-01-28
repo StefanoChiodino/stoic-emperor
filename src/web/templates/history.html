@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}History - Stoic Emperor{% endblock %}
+
+{% block content %}
+<div class="flex flex-1 overflow-hidden">
+    <div class="w-80 bg-black/30 border-r border-white/10 flex flex-col shrink-0">
+        <div class="p-5 border-b border-white/10">
+            <h2 class="text-lg text-gold-500 mb-1">Your Sessions</h2>
+            <p id="sessions-count" class="text-sm text-gray-500">Loading...</p>
+        </div>
+        <div id="sessions-list" class="flex-1 overflow-y-auto">
+            <div class="p-20 text-center text-gray-500">Loading sessions...</div>
+        </div>
+    </div>
+
+    <div class="flex-1 flex flex-col bg-black/10">
+        <div class="p-5 border-b border-white/10">
+            <h2 id="messages-title" class="text-lg text-gold-500">Select a session</h2>
+        </div>
+        <div id="messages-content" class="flex-1 overflow-y-auto p-8">
+            <div class="text-center py-20 text-gray-500">
+                <h3 class="text-2xl text-gray-400 mb-2">No session selected</h3>
+                <p>Choose a conversation from the left to view its messages.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let sessions = [];
+    let selectedSessionId = null;
+
+    async function loadSessions() {
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch('/api/sessions', { headers });
+            if (!response.ok) throw new Error('Failed to load sessions');
+
+            sessions = await response.json();
+            renderSessions();
+        } catch (error) {
+            console.error('Failed to load sessions:', error);
+            document.getElementById('sessions-list').innerHTML = `
+                <div class="p-10 text-center text-gray-500">
+                    <p class="text-red-400">Failed to load sessions</p>
+                </div>
+            `;
+        }
+    }
+
+    function renderSessions() {
+        const container = document.getElementById('sessions-list');
+        const countEl = document.getElementById('sessions-count');
+
+        if (sessions.length === 0) {
+            container.innerHTML = `
+                <div class="p-10 text-center text-gray-500">
+                    <p>No conversations yet.</p>
+                </div>
+            `;
+            countEl.textContent = 'No sessions';
+            return;
+        }
+
+        countEl.textContent = `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`;
+
+        container.innerHTML = sessions.map(s => `
+            <div class="p-4 border-b border-white/5 cursor-pointer hover:bg-white/5 transition ${selectedSessionId === s.id ? 'bg-gold-500/15 border-l-4 border-l-gold-500' : ''}"
+                 onclick="selectSession('${s.id}')">
+                <div class="text-sm text-gold-500 mb-1">${formatDate(s.created_at)}</div>
+                <div class="text-xs text-gray-500">${s.message_count} message${s.message_count !== 1 ? 's' : ''}</div>
+            </div>
+        `).join('');
+    }
+
+    async function selectSession(sessionId) {
+        selectedSessionId = sessionId;
+        renderSessions();
+        await loadMessages(sessionId);
+    }
+
+    async function loadMessages(sessionId) {
+        const container = document.getElementById('messages-content');
+        const titleEl = document.getElementById('messages-title');
+        const session = sessions.find(s => s.id === sessionId);
+
+        container.innerHTML = '<div class="p-20 text-center text-gray-500">Loading messages...</div>';
+        titleEl.textContent = session ? formatDate(session.created_at) : 'Loading...';
+
+        try {
+            const headers = await getAuthHeaders();
+            const response = await fetch(`/api/sessions/${sessionId}/messages`, { headers });
+            if (!response.ok) throw new Error('Failed to load messages');
+
+            const messages = await response.json();
+            renderMessages(messages);
+        } catch (error) {
+            console.error('Failed to load messages:', error);
+            container.innerHTML = `
+                <div class="p-10 text-center text-gray-500">
+                    <p class="text-red-400">Failed to load messages</p>
+                </div>
+            `;
+        }
+    }
+
+    function renderMessages(messages) {
+        const container = document.getElementById('messages-content');
+
+        if (messages.length === 0) {
+            container.innerHTML = `
+                <div class="p-10 text-center text-gray-500">
+                    <p>No messages in this session.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = messages.map(m => {
+            const roleClass = m.role === 'user'
+                ? 'bg-white/5 ml-20'
+                : 'bg-gold-500/10 border-l-4 border-gold-500';
+            const labelClass = m.role === 'user' ? 'text-gray-500' : 'text-gold-500';
+            const label = m.role === 'user' ? 'You' : 'Marcus Aurelius';
+            return `
+                <div class="max-w-3xl mx-auto mb-6 p-5 rounded-xl ${roleClass}">
+                    <div class="text-xs uppercase tracking-wide ${labelClass} mb-2">${label}</div>
+                    <div class="leading-relaxed whitespace-pre-wrap">${escapeHtml(m.content)}</div>
+                </div>
+            `;
+        }).join('');
+
+        container.scrollTop = 0;
+    }
+
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays} days ago`;
+
+        return date.toLocaleDateString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await new Promise(r => setTimeout(r, 100));
+        await loadSessions();
+    });
+</script>
+{% endblock %}

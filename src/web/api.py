@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
@@ -48,7 +48,9 @@ def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = De
         raise
 
 static_path = Path(__file__).parent / "static"
+templates_path = Path(__file__).parent / "templates"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
+templates = Jinja2Templates(directory=templates_path)
 
 
 class ChatRequest(BaseModel):
@@ -91,18 +93,23 @@ class AnalysisStatus(BaseModel):
 
 
 @app.get("/")
-async def index():
-    return FileResponse(static_path / "index.html")
+async def index(request: Request):
+    return templates.TemplateResponse("chat.html", {"request": request, "active_page": "chat"})
 
 
 @app.get("/login")
-async def login():
-    return FileResponse(static_path / "login.html")
+async def login(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.get("/history")
-async def history():
-    return FileResponse(static_path / "history.html")
+async def history(request: Request):
+    return templates.TemplateResponse("history.html", {"request": request, "active_page": "history"})
+
+
+@app.get("/analysis")
+async def analysis(request: Request):
+    return templates.TemplateResponse("analysis.html", {"request": request, "active_page": "analysis"})
 
 
 @app.get("/api/config")

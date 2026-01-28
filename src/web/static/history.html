@@ -22,54 +22,96 @@
         .container {
             display: flex;
             height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: rgba(0, 0, 0, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
             flex-direction: column;
+            flex-shrink: 0;
         }
 
-        .header {
-            padding: 20px 32px;
+        .sidebar-header {
+            padding: 24px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(0, 0, 0, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
 
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .header h1 {
+        .sidebar-header h1 {
             font-size: 1.5rem;
             color: #c9a227;
+            margin-bottom: 4px;
         }
 
-        .header-nav {
+        .sidebar-header p {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .auth-section {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .auth-user {
             display: flex;
-            gap: 12px;
             align-items: center;
+            gap: 12px;
         }
 
-        .nav-link {
-            padding: 8px 16px;
+        .auth-user-email {
+            flex: 1;
+            font-size: 0.85rem;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .auth-btn {
+            padding: 8px 12px;
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: #ccc;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9rem;
-            text-decoration: none;
+            font-size: 0.8rem;
             transition: all 0.2s;
         }
 
-        .nav-link:hover {
+        .auth-btn:hover {
             background: rgba(255, 255, 255, 0.15);
         }
 
-        .user-email {
-            font-size: 0.85rem;
-            color: #888;
+        .nav-tabs {
+            padding: 16px;
+        }
+
+        .nav-tab {
+            display: block;
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            text-align: left;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .nav-tab:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-tab.active {
+            background: rgba(201, 162, 39, 0.15);
+            border-color: rgba(201, 162, 39, 0.3);
+            color: #c9a227;
         }
 
         .content {
@@ -210,6 +252,9 @@
         }
 
         @media (max-width: 768px) {
+            .sidebar {
+                display: none;
+            }
             .content {
                 flex-direction: column;
             }
@@ -222,24 +267,27 @@
             .message.user {
                 margin-left: 20px;
             }
-            .user-email {
-                display: none;
-            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div class="header-left">
-                <h1>Conversation History</h1>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Stoic Emperor</h1>
             </div>
-            <div class="header-nav">
-                <span class="user-email" id="user-email"></span>
-                <a href="/" class="nav-link">Back to Chat</a>
-                <button class="nav-link" onclick="signOut()">Sign Out</button>
+            <div class="auth-section">
+                <div class="auth-user">
+                    <span class="auth-user-email" id="user-email"></span>
+                    <button class="auth-btn" onclick="signOut()">Sign Out</button>
+                </div>
             </div>
-        </div>
+            <div class="nav-tabs">
+                <a href="/" class="nav-tab">Chat</a>
+                <a href="/history" class="nav-tab active">History</a>
+                <a href="/#analysis-section" class="nav-tab">Analysis</a>
+            </div>
+        </aside>
 
         <div class="content">
             <div class="sessions-panel">

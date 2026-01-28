@@ -1,0 +1,32 @@
+<aside class="w-72 bg-black/30 border-r border-white/10 flex flex-col shrink-0">
+    <div class="p-6 border-b border-white/10">
+        <h1 class="text-2xl font-semibold text-gold-500">Stoic Emperor</h1>
+    </div>
+
+    <div class="p-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+            <span id="user-email" class="flex-1 text-sm text-gray-300 truncate"></span>
+            <button onclick="signOut()" class="px-3 py-2 text-xs bg-white/10 border border-white/20 text-gray-300 rounded-md hover:bg-white/15 transition">
+                Sign Out
+            </button>
+        </div>
+    </div>
+
+    <nav class="p-4 space-y-2">
+        <a href="/"
+           class="block w-full px-4 py-3 rounded-lg text-sm transition
+                  {% if active_page == 'chat' %}bg-gold-500/15 border border-gold-500/30 text-gold-500{% else %}bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10{% endif %}">
+            Chat
+        </a>
+        <a href="/history"
+           class="block w-full px-4 py-3 rounded-lg text-sm transition
+                  {% if active_page == 'history' %}bg-gold-500/15 border border-gold-500/30 text-gold-500{% else %}bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10{% endif %}">
+            History
+        </a>
+        <a href="/analysis"
+           class="block w-full px-4 py-3 rounded-lg text-sm transition
+                  {% if active_page == 'analysis' %}bg-gold-500/15 border border-gold-500/30 text-gold-500{% else %}bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10{% endif %}">
+            Analysis
+        </a>
+    </nav>
+</aside>

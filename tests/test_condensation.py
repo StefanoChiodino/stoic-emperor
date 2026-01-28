@@ -520,11 +520,11 @@ class TestDatabaseCondensedSummaryOperations:
         assert messages[0].created_at == datetime(2024, 1, 5)
 
     def test_condensed_summary_table_exists(self, test_db_path):
+        from sqlalchemy import inspect
+
         db = Database(test_db_path)
 
-        with db._connection() as conn:
-            tables = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='condensed_summaries'"
-            ).fetchall()
+        inspector = inspect(db.engine)
+        table_names = inspector.get_table_names()
 
-        assert len(tables) == 1
+        assert "condensed_summaries" in table_names

@@ -3,6 +3,7 @@ stoicemperor.com
 stoicrelief.com
 theemperor.ai
 stoicemperor.ai
+dearmarcus.ai
 
 
 emperor.talk
