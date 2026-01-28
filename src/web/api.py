@@ -2,9 +2,12 @@ from src.utils.privacy import disable_telemetry
 disable_telemetry()
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+
+print("Starting imports...", file=sys.stderr, flush=True)
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +19,19 @@ from src.models.schemas import Session, Message, User
 from src.utils.config import load_config
 from src.utils.auth import get_user_id_from_token, optional_auth, security
 
-app = FastAPI(title="Stoic Emperor", docs_url="/api/docs")
+print("Imports complete, creating app...", file=sys.stderr, flush=True)
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    print("FastAPI startup complete", file=sys.stderr, flush=True)
+    yield
+    print("FastAPI shutdown", file=sys.stderr, flush=True)
+
+app = FastAPI(title="Stoic Emperor", docs_url="/api/docs", lifespan=lifespan)
+
+print("App created", file=sys.stderr, flush=True)
 
 _state = {"initialized": False, "config": {}, "db": None, "vectors": None, "brain": None, "condensation": None}
 
