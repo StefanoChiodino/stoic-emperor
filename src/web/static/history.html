@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversation History - Stoic Emperor</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 20px 32px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #c9a227;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .nav-link {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .user-email {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sessions-panel {
+            width: 350px;
+            background: rgba(0, 0, 0, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sessions-header {
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sessions-header h2 {
+            font-size: 1.1rem;
+            color: #c9a227;
+            margin-bottom: 4px;
+        }
+
+        .sessions-header p {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .sessions-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .session-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .session-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .session-item.active {
+            background: rgba(201, 162, 39, 0.15);
+            border-left: 3px solid #c9a227;
+        }
+
+        .session-date {
+            font-size: 0.9rem;
+            color: #c9a227;
+            margin-bottom: 4px;
+        }
+
+        .session-meta {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .messages-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .messages-header {
+            padding: 20px 32px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .messages-header h2 {
+            font-size: 1.1rem;
+            color: #c9a227;
+        }
+
+        .messages-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+        }
+
+        .message {
+            max-width: 800px;
+            margin: 0 auto 24px;
+            padding: 20px 24px;
+            border-radius: 12px;
+        }
+
+        .message.user {
+            background: rgba(255, 255, 255, 0.08);
+            margin-left: 80px;
+        }
+
+        .message.emperor {
+            background: rgba(201, 162, 39, 0.1);
+            border-left: 3px solid #c9a227;
+        }
+
+        .message-header {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .message.emperor .message-header {
+            color: #c9a227;
+        }
+
+        .message-content {
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 80px 32px;
+            color: #666;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 80px 32px;
+            color: #888;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            .sessions-panel {
+                width: 100%;
+                max-height: 40vh;
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .message.user {
+                margin-left: 20px;
+            }
+            .user-email {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>Conversation History</h1>
+            </div>
+            <div class="header-nav">
+                <span class="user-email" id="user-email"></span>
+                <a href="/" class="nav-link">Back to Chat</a>
+                <button class="nav-link" onclick="signOut()">Sign Out</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="sessions-panel">
+                <div class="sessions-header">
+                    <h2>Your Sessions</h2>
+                    <p id="sessions-count">Loading...</p>
+                </div>
+                <div class="sessions-list" id="sessions-list">
+                    <div class="loading">Loading sessions...</div>
+                </div>
+            </div>
+
+            <div class="messages-panel">
+                <div class="messages-header">
+                    <h2 id="messages-title">Select a session</h2>
+                </div>
+                <div class="messages-content" id="messages-content">
+                    <div class="empty-state">
+                        <h3>No session selected</h3>
+                        <p>Choose a conversation from the left to view its messages.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        let supabaseClient = null;
+        let currentUser = null;
+        let sessions = [];
+        let selectedSessionId = null;
+
+        async function initSupabase() {
+            try {
+                const configResponse = await fetch('/api/config');
+                const config = await configResponse.json();
+
+                if (config.supabase_url && config.supabase_anon_key) {
+                    supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
+                    console.log('Supabase initialized');
+                } else {
+                    console.warn('Supabase not configured');
+                }
+            } catch (error) {
+                console.error('Failed to init Supabase:', error);
+            }
+        }
+
+        async function initAuth() {
+            if (!supabaseClient) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session) {
+                setUser({ id: session.user.id, email: session.user.email });
+            } else {
+                window.location.href = '/login';
+                return;
+            }
+
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                if (session) {
+                    setUser({ id: session.user.id, email: session.user.email });
+                } else {
+                    window.location.href = '/login';
+                }
+            });
+        }
+
+        function setUser(user) {
+            currentUser = user;
+            document.getElementById('user-email').textContent = user.email;
+        }
+
+        async function signOut() {
+            if (supabaseClient) {
+                await supabaseClient.auth.signOut();
+            }
+            window.location.href = '/login';
+        }
+
+        async function getAuthHeaders() {
+            if (!supabaseClient) return {};
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (session?.access_token) {
+                return { 'Authorization': `Bearer ${session.access_token}` };
+            }
+            return {};
+        }
+
+        async function loadSessions() {
+            try {
+                const headers = await getAuthHeaders();
+                const response = await fetch('/api/sessions', { headers });
+                if (!response.ok) {
+                    throw new Error('Failed to load sessions');
+                }
+
+                sessions = await response.json();
+                renderSessions();
+            } catch (error) {
+                console.error('Failed to load sessions:', error);
+                document.getElementById('sessions-list').innerHTML = `
+                    <div class="empty-state">
+                        <h3>Failed to load sessions</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderSessions() {
+            const container = document.getElementById('sessions-list');
+            const countEl = document.getElementById('sessions-count');
+
+            if (sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No conversations yet</h3>
+                        <p>Start chatting with Marcus Aurelius to see your history here.</p>
+                    </div>
+                `;
+                countEl.textContent = 'No sessions';
+                return;
+            }
+
+            countEl.textContent = `${sessions.length} session${sessions.length !== 1 ? 's' : ''}`;
+
+            container.innerHTML = sessions.map(session => `
+                <div class="session-item" data-session-id="${session.id}" onclick="selectSession('${session.id}')">
+                    <div class="session-date">${formatDate(session.created_at)}</div>
+                    <div class="session-meta">${session.message_count} message${session.message_count !== 1 ? 's' : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        async function selectSession(sessionId) {
+            selectedSessionId = sessionId;
+
+            document.querySelectorAll('.session-item').forEach(item => {
+                if (item.dataset.sessionId === sessionId) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            await loadMessages(sessionId);
+        }
+
+        async function loadMessages(sessionId) {
+            const container = document.getElementById('messages-content');
+            const titleEl = document.getElementById('messages-title');
+            const session = sessions.find(s => s.id === sessionId);
+
+            container.innerHTML = '<div class="loading">Loading messages...</div>';
+            titleEl.textContent = session ? formatDate(session.created_at) : 'Loading...';
+
+            try {
+                const headers = await getAuthHeaders();
+                const response = await fetch(`/api/sessions/${sessionId}/messages`, { headers });
+                if (!response.ok) {
+                    throw new Error('Failed to load messages');
+                }
+
+                const messages = await response.json();
+                renderMessages(messages);
+            } catch (error) {
+                console.error('Failed to load messages:', error);
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Failed to load messages</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderMessages(messages) {
+            const container = document.getElementById('messages-content');
+
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No messages</h3>
+                        <p>This session has no messages.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = messages.map(m => `
+                <div class="message ${m.role}">
+                    <div class="message-header">${m.role === 'user' ? 'You' : 'Marcus Aurelius'}</div>
+                    <div class="message-content">${escapeHtml(m.content)}</div>
+                </div>
+            `).join('');
+
+            container.scrollTop = 0;
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return `${diffDays} days ago`;
+
+            return date.toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function init() {
+            await initSupabase();
+
+            let session = null;
+            if (supabaseClient) {
+                const { data } = await supabaseClient.auth.getSession();
+                session = data.session;
+            }
+
+            if (!session) {
+                window.location.href = '/login';
+                return;
+            }
+
+            await initAuth();
+            await loadSessions();
+        }
+
+        init();
+    </script>
+</body>
+</html>

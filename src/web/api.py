@@ -35,10 +35,10 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:
     if ENVIRONMENT == "development" and not credentials:
         return DEFAULT_USER_ID
-    
+
     if not credentials:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         from src.utils.auth import get_user_id_from_token
         return get_user_id_from_token(credentials)
@@ -93,6 +93,16 @@ class AnalysisStatus(BaseModel):
 @app.get("/")
 async def index():
     return FileResponse(static_path / "index.html")
+
+
+@app.get("/login")
+async def login():
+    return FileResponse(static_path / "login.html")
+
+
+@app.get("/history")
+async def history():
+    return FileResponse(static_path / "history.html")
 
 
 @app.get("/api/config")
@@ -157,20 +167,24 @@ async def create_session(user_id: str = Depends(get_current_user_id)):
 @app.get("/api/sessions", response_model=list[SessionInfo])
 async def list_sessions(user_id: str = Depends(get_current_user_id)):
     user = db.get_or_create_user(user_id)
+    ph = db._placeholder()
     with db._connection() as conn:
-        rows = conn.execute(
-            """SELECT s.id, s.created_at, COUNT(m.id) as message_count
+        cursor = db._get_cursor(conn, dict_cursor=True)
+        cursor.execute(
+            f"""SELECT s.id, s.created_at, COUNT(m.id) as message_count
                FROM sessions s
                LEFT JOIN messages m ON s.id = m.session_id
-               WHERE s.user_id = ?
-               GROUP BY s.id
+               WHERE s.user_id = {ph}
+               GROUP BY s.id, s.created_at
                ORDER BY s.created_at DESC""",
             (user.id,)
-        ).fetchall()
+        )
+        rows = cursor.fetchall()
+        cursor.close()
         return [
             SessionInfo(
                 id=row["id"],
-                created_at=datetime.fromisoformat(row["created_at"]),
+                created_at=db._parse_timestamp(row["created_at"]),
                 message_count=row["message_count"]
             )
             for row in rows
@@ -196,14 +210,14 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
     profile = db.get_latest_profile(user.id)
     if not profile:
         return None
-    
+
     consensus_reached = None
     stability_score = None
     if profile.get("consensus_log"):
         log = profile["consensus_log"]
         consensus_reached = log.get("consensus_reached")
         stability_score = log.get("stability_score")
-    
+
     return ProfileInfo(
         version=profile["version"],
         content=profile["content"],
@@ -219,7 +233,7 @@ async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
     sessions_since = db.count_sessions_since_last_analysis(user.id)
     threshold = config.get("aegean_consensus", {}).get("sessions_between_analysis", 5)
     profile = db.get_latest_profile(user.id)
-    
+
     return AnalysisStatus(
         sessions_since_analysis=sessions_since,
         threshold=threshold,
@@ -232,20 +246,20 @@ async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
 async def run_analysis(user_id: str = Depends(get_current_user_id)):
     from src.cli.analyze import main as run_analysis_main
     user = db.get_or_create_user(user_id)
-    
+
     run_analysis_main(user_id=user.id, force=True, show=False)
-    
+
     profile = db.get_latest_profile(user.id)
     if not profile:
         raise HTTPException(status_code=500, detail="Analysis failed to generate profile")
-    
+
     consensus_reached = None
     stability_score = None
     if profile.get("consensus_log"):
         log = profile["consensus_log"]
         consensus_reached = log.get("consensus_reached")
         stability_score = log.get("stability_score")
-    
+
     return ProfileInfo(
         version=profile["version"],
         content=profile["content"],

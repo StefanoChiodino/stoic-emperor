@@ -373,76 +373,28 @@
             background: rgba(255, 255, 255, 0.15);
         }
 
-        .auth-btn.primary {
-            background: rgba(201, 162, 39, 0.2);
-            border-color: rgba(201, 162, 39, 0.4);
-            color: #c9a227;
-        }
-
-        .auth-btn.primary:hover {
-            background: rgba(201, 162, 39, 0.3);
-        }
-
-        .auth-form {
+        .nav-links {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
+            margin-top: 12px;
         }
 
-        .auth-form input {
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 8px;
-            color: #e0e0e0;
-            font-size: 0.9rem;
-        }
-
-        .auth-form input:focus {
-            outline: none;
-            border-color: #c9a227;
-        }
-
-        .auth-form input::placeholder {
-            color: #666;
-        }
-
-        .auth-toggle {
-            text-align: center;
-            font-size: 0.8rem;
-            color: #888;
-        }
-
-        .auth-toggle a {
-            color: #c9a227;
+        .nav-link {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ccc;
+            border-radius: 6px;
             cursor: pointer;
+            font-size: 0.85rem;
             text-decoration: none;
+            text-align: center;
+            transition: all 0.2s;
         }
 
-        .auth-toggle a:hover {
-            text-decoration: underline;
-        }
-
-        .auth-error {
-            padding: 8px 12px;
-            background: rgba(255, 87, 87, 0.15);
-            border: 1px solid rgba(255, 87, 87, 0.3);
-            border-radius: 6px;
-            color: #ff5757;
-            font-size: 0.8rem;
-        }
-
-        .auth-success {
-            padding: 8px 12px;
-            background: rgba(76, 175, 80, 0.15);
-            border: 1px solid rgba(76, 175, 80, 0.3);
-            border-radius: 6px;
-            color: #4caf50;
-            font-size: 0.8rem;
-        }
-
-        .hidden {
-            display: none !important;
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
@@ -454,26 +406,12 @@
                 <p>Marcus Aurelius AI</p>
             </div>
             <div class="auth-section" id="auth-section">
-                <div id="auth-logged-in" class="hidden">
-                    <div class="auth-user">
-                        <span class="auth-user-email" id="user-email"></span>
-                        <button class="auth-btn" onclick="signOut()">Sign Out</button>
-                    </div>
+                <div class="auth-user">
+                    <span class="auth-user-email" id="user-email"></span>
+                    <button class="auth-btn" onclick="signOut()">Sign Out</button>
                 </div>
-                <div id="auth-logged-out">
-                    <div id="auth-form-container">
-                        <form class="auth-form" id="login-form" onsubmit="handleAuth(event)">
-                            <input type="email" id="auth-email" placeholder="Email" required>
-                            <input type="password" id="auth-password" placeholder="Password" required minlength="6">
-                            <div id="auth-error" class="auth-error hidden"></div>
-                            <div id="auth-success" class="auth-success hidden"></div>
-                            <button type="submit" class="auth-btn primary" id="auth-submit">Sign In</button>
-                        </form>
-                        <div class="auth-toggle">
-                            <span id="auth-toggle-text">No account? </span>
-                            <a onclick="toggleAuthMode()"><span id="auth-toggle-link">Sign Up</span></a>
-                        </div>
-                    </div>
+                <div class="nav-links">
+                    <a href="/history" class="nav-link">View History</a>
                 </div>
             </div>
             <div class="sidebar-section">
@@ -528,13 +466,12 @@
         let currentSessionId = null;
         let supabaseClient = null;
         let currentUser = null;
-        let authMode = 'login';
 
         async function initSupabase() {
             try {
                 const configResponse = await fetch('/api/config');
                 const config = await configResponse.json();
-                
+
                 if (config.supabase_url && config.supabase_anon_key) {
                     supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
                     console.log('Supabase initialized');
@@ -548,131 +485,37 @@
 
         async function initAuth() {
             if (!supabaseClient) {
-                setUser(null);
+                window.location.href = '/login';
                 return;
             }
-            
+
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (session) {
                 setUser({ id: session.user.id, email: session.user.email });
             } else {
-                setUser(null);
+                window.location.href = '/login';
+                return;
             }
-            
+
             supabaseClient.auth.onAuthStateChange((event, session) => {
                 if (session) {
                     setUser({ id: session.user.id, email: session.user.email });
                 } else {
-                    setUser(null);
+                    window.location.href = '/login';
                 }
             });
         }
 
         function setUser(user) {
             currentUser = user;
-            const loggedIn = document.getElementById('auth-logged-in');
-            const loggedOut = document.getElementById('auth-logged-out');
-            const emailEl = document.getElementById('user-email');
-            
-            if (user) {
-                loggedIn.classList.remove('hidden');
-                loggedOut.classList.add('hidden');
-                emailEl.textContent = user.email;
-            } else {
-                loggedIn.classList.add('hidden');
-                loggedOut.classList.remove('hidden');
-            }
-        }
-
-        function toggleAuthMode() {
-            authMode = authMode === 'login' ? 'signup' : 'login';
-            const submitBtn = document.getElementById('auth-submit');
-            const toggleText = document.getElementById('auth-toggle-text');
-            const toggleLink = document.getElementById('auth-toggle-link');
-            
-            if (authMode === 'signup') {
-                submitBtn.textContent = 'Sign Up';
-                toggleText.textContent = 'Have an account? ';
-                toggleLink.textContent = 'Sign In';
-            } else {
-                submitBtn.textContent = 'Sign In';
-                toggleText.textContent = 'No account? ';
-                toggleLink.textContent = 'Sign Up';
-            }
-            hideAuthMessages();
-        }
-
-        function showAuthError(message) {
-            const errorEl = document.getElementById('auth-error');
-            errorEl.textContent = message;
-            errorEl.classList.remove('hidden');
-            document.getElementById('auth-success').classList.add('hidden');
-        }
-
-        function showAuthSuccess(message) {
-            const successEl = document.getElementById('auth-success');
-            successEl.textContent = message;
-            successEl.classList.remove('hidden');
-            document.getElementById('auth-error').classList.add('hidden');
-        }
-
-        function hideAuthMessages() {
-            document.getElementById('auth-error').classList.add('hidden');
-            document.getElementById('auth-success').classList.add('hidden');
-        }
-
-        async function handleAuth(event) {
-            event.preventDefault();
-            console.log('handleAuth called, mode:', authMode);
-            
-            if (!supabaseClient) {
-                showAuthError('Authentication not configured - check SUPABASE_URL and SUPABASE_ANON_KEY');
-                return;
-            }
-            
-            const email = document.getElementById('auth-email').value;
-            const password = document.getElementById('auth-password').value;
-            const submitBtn = document.getElementById('auth-submit');
-            
-            console.log('Attempting', authMode, 'for:', email);
-            submitBtn.disabled = true;
-            hideAuthMessages();
-            
-            try {
-                let result;
-                if (authMode === 'signup') {
-                    result = await supabaseClient.auth.signUp({ email, password });
-                } else {
-                    result = await supabaseClient.auth.signInWithPassword({ email, password });
-                }
-                
-                console.log('Auth result:', result);
-                
-                if (result.error) {
-                    showAuthError(result.error.message);
-                } else if (authMode === 'signup' && !result.data.session) {
-                    showAuthSuccess('Check your email to confirm your account');
-                } else {
-                    document.getElementById('auth-email').value = '';
-                    document.getElementById('auth-password').value = '';
-                    loadUserData();
-                }
-            } catch (error) {
-                showAuthError('Authentication failed');
-                console.error('Auth error:', error);
-            } finally {
-                submitBtn.disabled = false;
-            }
+            document.getElementById('user-email').textContent = user.email;
         }
 
         async function signOut() {
             if (supabaseClient) {
                 await supabaseClient.auth.signOut();
             }
-            setUser(null);
-            currentSessionId = null;
-            renderMessages([]);
-            loadUserData();
+            window.location.href = '/login';
         }
 
         async function getAuthHeaders() {
@@ -915,6 +758,18 @@
 
         async function init() {
             await initSupabase();
+
+            let session = null;
+            if (supabaseClient) {
+                const { data } = await supabaseClient.auth.getSession();
+                session = data.session;
+            }
+
+            if (!session) {
+                window.location.href = '/login';
+                return;
+            }
+
             await initAuth();
             await loadUserData();
         }

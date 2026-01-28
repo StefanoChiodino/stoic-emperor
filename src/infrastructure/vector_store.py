@@ -98,6 +98,43 @@ class VectorStore:
                     """)
             cursor.close()
 
+        if self.is_postgres:
+            self._ensure_rls_policies()
+
+    def _ensure_rls_policies(self) -> None:
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            for name in self.COLLECTIONS:
+                cursor.execute(f"ALTER TABLE vector_{name} ENABLE ROW LEVEL SECURITY")
+
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_proc p
+                    JOIN pg_namespace n ON p.pronamespace = n.oid
+                    WHERE n.nspname = 'auth' AND p.proname = 'uid'
+                )
+            """)
+            has_supabase_auth = cursor.fetchone()[0]
+
+            if has_supabase_auth:
+                for name in ["episodic", "semantic"]:
+                    cursor.execute(f"DROP POLICY IF EXISTS vector_{name}_user_policy ON vector_{name}")
+                    cursor.execute(f"""
+                        CREATE POLICY vector_{name}_user_policy ON vector_{name}
+                            FOR ALL
+                            USING (metadata->>'user_id' = auth.uid()::text)
+                            WITH CHECK (metadata->>'user_id' = auth.uid()::text)
+                    """)
+
+                for name in ["stoic_wisdom", "psychoanalysis"]:
+                    cursor.execute(f"DROP POLICY IF EXISTS vector_{name}_read_policy ON vector_{name}")
+                    cursor.execute(f"""
+                        CREATE POLICY vector_{name}_read_policy ON vector_{name}
+                            FOR SELECT
+                            USING (true)
+                    """)
+            cursor.close()
+
     def add(
         self,
         collection: str,

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from src.models.schemas import User, Session, Message, SemanticInsight, PsychUpdate, CondensedSummary
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 SQLITE_MIGRATIONS = {
     1: """
@@ -80,7 +80,9 @@ SQLITE_MIGRATIONS = {
 
         CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
         CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
-    """
+    """,
+    3: "",
+    4: "",
 }
 
 POSTGRES_MIGRATIONS = {
@@ -153,16 +155,75 @@ POSTGRES_MIGRATIONS = {
         CREATE INDEX IF NOT EXISTS idx_summaries_user_level ON condensed_summaries(user_id, level);
         CREATE INDEX IF NOT EXISTS idx_summaries_period ON condensed_summaries(user_id, period_end);
     """,
+    3: """
+        ALTER TABLE schema_version ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE semantic_insights ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE condensed_summaries ENABLE ROW LEVEL SECURITY;
+    """,
+    4: """
+        DO $$
+        DECLARE
+            has_supabase_auth BOOLEAN;
+        BEGIN
+            SELECT EXISTS (
+                SELECT 1 FROM pg_proc p
+                JOIN pg_namespace n ON p.pronamespace = n.oid
+                WHERE n.nspname = 'auth' AND p.proname = 'uid'
+            ) INTO has_supabase_auth;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_episodic') THEN
+                ALTER TABLE vector_episodic ENABLE ROW LEVEL SECURITY;
+                IF has_supabase_auth THEN
+                    DROP POLICY IF EXISTS vector_episodic_user_policy ON vector_episodic;
+                    CREATE POLICY vector_episodic_user_policy ON vector_episodic
+                        FOR ALL USING (metadata->>'user_id' = auth.uid()::text)
+                        WITH CHECK (metadata->>'user_id' = auth.uid()::text);
+                END IF;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_semantic') THEN
+                ALTER TABLE vector_semantic ENABLE ROW LEVEL SECURITY;
+                IF has_supabase_auth THEN
+                    DROP POLICY IF EXISTS vector_semantic_user_policy ON vector_semantic;
+                    CREATE POLICY vector_semantic_user_policy ON vector_semantic
+                        FOR ALL USING (metadata->>'user_id' = auth.uid()::text)
+                        WITH CHECK (metadata->>'user_id' = auth.uid()::text);
+                END IF;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_stoic_wisdom') THEN
+                ALTER TABLE vector_stoic_wisdom ENABLE ROW LEVEL SECURITY;
+                IF has_supabase_auth THEN
+                    DROP POLICY IF EXISTS vector_stoic_wisdom_read_policy ON vector_stoic_wisdom;
+                    CREATE POLICY vector_stoic_wisdom_read_policy ON vector_stoic_wisdom
+                        FOR SELECT USING (true);
+                END IF;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'vector_psychoanalysis') THEN
+                ALTER TABLE vector_psychoanalysis ENABLE ROW LEVEL SECURITY;
+                IF has_supabase_auth THEN
+                    DROP POLICY IF EXISTS vector_psychoanalysis_read_policy ON vector_psychoanalysis;
+                    CREATE POLICY vector_psychoanalysis_read_policy ON vector_psychoanalysis
+                        FOR SELECT USING (true);
+                END IF;
+            END IF;
+        END $$;
+    """,
 }
 
 
 class Database:
     def __init__(self, database_url: Optional[str] = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db")
-        
+
         parsed = urlparse(self.database_url)
         self.is_postgres = parsed.scheme in ("postgresql", "postgres")
-        
+
         if self.is_postgres:
             import psycopg2
             from psycopg2 import pool as pg_pool
@@ -176,7 +237,7 @@ class Database:
             db_path = self.database_url.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             self._sqlite_path = db_path
-        
+
         self._run_migrations()
 
     @contextmanager
@@ -203,7 +264,7 @@ class Database:
 
     def _run_migrations(self) -> None:
         migrations = POSTGRES_MIGRATIONS if self.is_postgres else SQLITE_MIGRATIONS
-        
+
         with self._connection() as conn:
             if self.is_postgres:
                 from psycopg2.extras import RealDictCursor
@@ -216,7 +277,7 @@ class Database:
                 cursor = conn.cursor()
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
                 table_exists = cursor.fetchone() is not None
-            
+
             if not table_exists:
                 current_version = 0
             else:
@@ -235,7 +296,7 @@ class Database:
                     else:
                         cursor.executescript(migrations[version])
                         cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
-            
+
             cursor.close()
 
     def _placeholder(self) -> str:
@@ -299,7 +360,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute(
                 f"INSERT INTO sessions (id, user_id, created_at, metadata) VALUES ({ph}, {ph}, {ph}, {ph})",
-                (session.id, session.user_id, 
+                (session.id, session.user_id,
                  session.created_at.isoformat() if not self.is_postgres else session.created_at,
                  json.dumps(session.metadata))
             )
@@ -356,8 +417,8 @@ class Database:
             created = message.created_at.isoformat() if not self.is_postgres else message.created_at
             semantic = message.semantic_processed_at.isoformat() if message.semantic_processed_at and not self.is_postgres else message.semantic_processed_at
             cursor.execute(
-                f"""INSERT INTO messages 
-                   (id, session_id, role, content, psych_update, created_at, semantic_processed_at) 
+                f"""INSERT INTO messages
+                   (id, session_id, role, content, psych_update, created_at, semantic_processed_at)
                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
                 (message.id, message.session_id, message.role, message.content,
                  json.dumps(psych_dict) if psych_dict else None, created, semantic)
@@ -409,8 +470,8 @@ class Database:
             cursor = conn.cursor()
             created = insight.created_at.isoformat() if not self.is_postgres else insight.created_at
             cursor.execute(
-                f"""INSERT INTO semantic_insights 
-                   (id, user_id, source_message_id, assertion, confidence, created_at) 
+                f"""INSERT INTO semantic_insights
+                   (id, user_id, source_message_id, assertion, confidence, created_at)
                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
                 (insight.id, insight.user_id, insight.source_message_id,
                  insight.assertion, insight.confidence, created)
@@ -449,7 +510,7 @@ class Database:
                 (user_id,)
             )
             last_profile = cursor.fetchone()
-            
+
             if last_profile and last_profile["last"]:
                 cursor.execute(
                     f"SELECT COUNT(*) as cnt FROM sessions WHERE user_id = {ph} AND created_at > {ph}",
@@ -462,7 +523,7 @@ class Database:
                     (user_id,)
                 )
                 count = cursor.fetchone()
-            
+
             cursor.close()
             return count["cnt"] if count else 0
 
@@ -471,7 +532,7 @@ class Database:
         with self._connection() as conn:
             cursor = self._get_cursor(conn, dict_cursor=True)
             cursor.execute(
-                f"""SELECT content, version, created_at, consensus_log 
+                f"""SELECT content, version, created_at, consensus_log
                    FROM profiles WHERE user_id = {ph} ORDER BY version DESC LIMIT 1""",
                 (user_id,)
             )
@@ -514,10 +575,10 @@ class Database:
                 pe = summary.period_end.isoformat()
                 ca = summary.created_at.isoformat()
             cursor.execute(
-                f"""INSERT INTO condensed_summaries 
-                   (id, user_id, level, content, period_start, period_end, 
-                    source_message_count, source_word_count, source_summary_ids, 
-                    consensus_log, created_at) 
+                f"""INSERT INTO condensed_summaries
+                   (id, user_id, level, content, period_start, period_end,
+                    source_message_count, source_word_count, source_summary_ids,
+                    consensus_log, created_at)
                    VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
                 (summary.id, summary.user_id, summary.level, summary.content,
                  ps, pe, summary.source_message_count, summary.source_word_count,
@@ -533,15 +594,15 @@ class Database:
             cursor = self._get_cursor(conn, dict_cursor=True)
             if level is not None:
                 cursor.execute(
-                    f"""SELECT * FROM condensed_summaries 
-                       WHERE user_id = {ph} AND level = {ph} 
+                    f"""SELECT * FROM condensed_summaries
+                       WHERE user_id = {ph} AND level = {ph}
                        ORDER BY period_start""",
                     (user_id, level)
                 )
             else:
                 cursor.execute(
-                    f"""SELECT * FROM condensed_summaries 
-                       WHERE user_id = {ph} 
+                    f"""SELECT * FROM condensed_summaries
+                       WHERE user_id = {ph}
                        ORDER BY level, period_start""",
                     (user_id,)
                 )
@@ -550,9 +611,9 @@ class Database:
             return [self._row_to_condensed_summary(row) for row in rows]
 
     def get_messages_in_range(
-        self, 
-        user_id: str, 
-        start_date: Optional[datetime] = None, 
+        self,
+        user_id: str,
+        start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[Message]:
         ph = self._placeholder()
@@ -561,7 +622,7 @@ class Database:
             if not self.is_postgres:
                 start_date = start_date.isoformat() if start_date else None
                 end_date = end_date.isoformat() if end_date else None
-            
+
             if start_date and end_date:
                 cursor.execute(
                     f"""SELECT m.* FROM messages m
@@ -620,11 +681,11 @@ class Database:
             source_ids = json.loads(source_ids)
         elif source_ids is None:
             source_ids = []
-        
+
         consensus = row["consensus_log"]
         if isinstance(consensus, str):
             consensus = json.loads(consensus)
-        
+
         return CondensedSummary(
             id=row["id"],
             user_id=row["user_id"],
