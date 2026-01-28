@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from src.core.emperor_brain import EmperorBrain
 from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
+from src.memory.condensation import CondensationManager
 from src.models.schemas import Session, Message, User
 from src.utils.config import load_config
 from src.utils.auth import get_user_id_from_token, optional_auth, security
@@ -25,6 +26,7 @@ config = load_config()
 db = Database(config["database"]["url"])
 vectors = VectorStore(config["database"]["url"])
 brain = EmperorBrain(config=config)
+condensation = CondensationManager(db, config)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEFAULT_USER_ID = "default_user"
@@ -86,9 +88,9 @@ class ProfileInfo(BaseModel):
 
 
 class AnalysisStatus(BaseModel):
-    sessions_since_analysis: int
-    threshold: int
-    can_analyze: bool
+    uncondensed_tokens: int
+    condensation_threshold: int
+    summary_count: int
     has_profile: bool
 
 
@@ -180,6 +182,8 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     )
     db.save_message(emperor_msg)
 
+    _maybe_condense_and_analyze(user.id)
+
     return ChatResponse(
         response=response.response_text,
         session_id=session.id,
@@ -252,47 +256,49 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
 @app.get("/api/analysis/status", response_model=AnalysisStatus)
 async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
     user = db.get_or_create_user(user_id)
-    sessions_since = db.count_sessions_since_last_analysis(user.id)
-    threshold = config.get("aegean_consensus", {}).get("sessions_between_analysis", 5)
+    uncondensed = condensation.get_uncondensed_messages(user.id)
+    uncondensed_tokens = sum(condensation.estimate_tokens(m.content) for m in uncondensed)
+    summaries = db.get_condensed_summaries(user.id)
     profile = db.get_latest_profile(user.id)
 
     return AnalysisStatus(
-        sessions_since_analysis=sessions_since,
-        threshold=threshold,
-        can_analyze=sessions_since >= threshold,
+        uncondensed_tokens=uncondensed_tokens,
+        condensation_threshold=condensation.chunk_threshold_tokens,
+        summary_count=len(summaries),
         has_profile=profile is not None
     )
 
 
-@app.post("/api/analyze", response_model=ProfileInfo)
-async def run_analysis(user_id: str = Depends(get_current_user_id)):
-    from src.cli.analyze import main as run_analysis_main
-    user = db.get_or_create_user(user_id)
+def _maybe_condense_and_analyze(user_id: str) -> None:
+    try:
+        did_condense = condensation.maybe_condense(user_id, verbose=False)
+        if did_condense:
+            _maybe_update_profile(user_id)
+    except Exception:
+        pass
 
-    run_analysis_main(user_id=user.id, force=True, show=False)
 
-    profile = db.get_latest_profile(user.id)
-    if not profile:
-        raise HTTPException(status_code=500, detail="Analysis failed to generate profile")
+def _maybe_update_profile(user_id: str) -> None:
+    min_summaries = config.get("aegean_consensus", {}).get("min_summaries_for_profile", 3)
+    summaries = db.get_condensed_summaries(user_id)
+    if len(summaries) < min_summaries:
+        return
 
-    consensus_reached = None
-    stability_score = None
-    if profile.get("consensus_log"):
-        log = profile["consensus_log"]
-        consensus_reached = log.get("consensus_reached")
-        stability_score = log.get("stability_score")
+    profile = db.get_latest_profile(user_id)
+    if profile:
+        from datetime import datetime
+        last_profile_time = profile["created_at"]
+        if isinstance(last_profile_time, str):
+            last_profile_time = datetime.fromisoformat(last_profile_time)
+        new_summaries = [s for s in summaries if s.created_at > last_profile_time]
+        if len(new_summaries) < 2:
+            return
 
-    created_at = profile["created_at"]
-    if isinstance(created_at, str):
-        created_at = datetime.fromisoformat(created_at)
-
-    return ProfileInfo(
-        version=profile["version"],
-        content=profile["content"],
-        created_at=created_at,
-        consensus_reached=consensus_reached,
-        stability_score=stability_score
-    )
+    try:
+        from src.cli.analyze import main as run_analysis_main
+        run_analysis_main(user_id=user_id, force=True, show=False)
+    except Exception:
+        pass
 
 
 def _retrieve_context(user_message: str, user_id: str) -> dict:

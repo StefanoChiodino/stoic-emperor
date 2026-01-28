@@ -5,23 +5,26 @@
 {% block content %}
 <div class="p-6 border-b border-white/10 bg-black/20">
     <h2 class="text-xl text-gold-500">Psychological Profile</h2>
-    <p class="text-sm text-gray-500 mt-1">Deep analysis based on your conversations.</p>
+    <p class="text-sm text-gray-500 mt-1">Deep analysis generated automatically as you converse.</p>
 </div>
 
 <div class="flex-1 overflow-y-auto p-8">
     <div class="max-w-3xl mx-auto">
-        <div class="mb-6 p-4 bg-black/20 rounded-lg border border-white/10">
-            <div id="analysis-status" class="text-sm text-gray-400 mb-3">Loading status...</div>
-            <button id="analyze-btn" onclick="runAnalysis()"
-                    class="w-full px-4 py-3 bg-gold-500/15 border border-gold-500/30 text-gold-500 rounded-lg hover:bg-gold-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                Run Analysis
-            </button>
+        <div id="progress-section" class="mb-6 p-4 bg-black/20 rounded-lg border border-white/10">
+            <div class="flex justify-between text-sm text-gray-400 mb-2">
+                <span>Memory condensation</span>
+                <span id="progress-text">Loading...</span>
+            </div>
+            <div class="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div id="progress-bar" class="h-full bg-gold-500 transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div id="summary-count" class="text-xs text-gray-500 mt-2"></div>
         </div>
 
         <div id="profile-content">
             <div class="text-center py-20 text-gray-500">
                 <h3 class="text-xl text-gray-400 mb-2">No profile yet</h3>
-                <p>Chat with Marcus Aurelius first, then run analysis to generate your psychological profile.</p>
+                <p>Continue chatting with Marcus Aurelius. Your profile will be generated automatically.</p>
             </div>
         </div>
     </div>
@@ -35,16 +38,13 @@
             const headers = await getAuthHeaders();
             const response = await fetch('/api/analysis/status', { headers });
             const status = await response.json();
-            const statusEl = document.getElementById('analysis-status');
-            const btn = document.getElementById('analyze-btn');
 
-            if (status.can_analyze) {
-                statusEl.innerHTML = `<span class="text-green-400">${status.sessions_since_analysis} sessions ready for analysis</span>`;
-                btn.disabled = false;
-            } else {
-                statusEl.innerHTML = `${status.sessions_since_analysis}/${status.threshold} sessions until next analysis`;
-                btn.disabled = !status.has_profile && status.sessions_since_analysis < status.threshold;
-            }
+            const progress = Math.min(100, Math.round((status.uncondensed_tokens / status.condensation_threshold) * 100));
+            document.getElementById('progress-text').textContent =
+                `${status.uncondensed_tokens.toLocaleString()} / ${status.condensation_threshold.toLocaleString()} tokens`;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+            document.getElementById('summary-count').textContent =
+                status.summary_count > 0 ? `${status.summary_count} condensed summaries` : '';
         } catch (error) {
             console.error('Failed to load analysis status:', error);
         }
@@ -60,16 +60,16 @@
                 const profile = await response.json();
                 if (profile) {
                     const consensusHtml = profile.consensus_reached !== null
-                        ? `<span class="${profile.consensus_reached ? 'text-green-400' : 'text-orange-400'}">${profile.consensus_reached ? '✓ Consensus' : '⚠ No consensus'}</span>`
+                        ? `<span class="${profile.consensus_reached ? 'text-green-400' : 'text-orange-400'}">${profile.consensus_reached ? 'Consensus' : 'No consensus'}</span>`
                         : '';
                     const stabilityHtml = profile.stability_score !== null
-                        ? ` • Stability: ${profile.stability_score.toFixed(2)}`
+                        ? ` | Stability: ${profile.stability_score.toFixed(2)}`
                         : '';
 
                     container.innerHTML = `
                         <div class="mb-4 p-3 bg-black/30 rounded-lg text-xs text-gray-500">
-                            Version ${profile.version} • ${formatDate(profile.created_at)}
-                            ${consensusHtml}${stabilityHtml}
+                            Version ${profile.version} | ${formatDate(profile.created_at)}
+                            ${consensusHtml ? ' | ' + consensusHtml : ''}${stabilityHtml}
                         </div>
                         <div class="prose prose-invert prose-gold max-w-none">
                             ${renderMarkdown(profile.content)}
@@ -81,35 +81,11 @@
             container.innerHTML = `
                 <div class="text-center py-20 text-gray-500">
                     <h3 class="text-xl text-gray-400 mb-2">No profile yet</h3>
-                    <p>Chat with Marcus Aurelius first, then run analysis.</p>
+                    <p>Continue chatting with Marcus Aurelius. Your profile will be generated automatically.</p>
                 </div>
             `;
         } catch (error) {
             console.error('Failed to load profile:', error);
-        }
-    }
-
-    async function runAnalysis() {
-        const btn = document.getElementById('analyze-btn');
-        btn.disabled = true;
-        btn.textContent = 'Analyzing...';
-
-        try {
-            const headers = await getAuthHeaders();
-            const response = await fetch('/api/analyze', { method: 'POST', headers });
-            if (response.ok) {
-                await loadProfile();
-                await loadAnalysisStatus();
-            } else {
-                const error = await response.json();
-                alert('Analysis failed: ' + (error.detail || 'Unknown error'));
-            }
-        } catch (error) {
-            console.error('Failed to run analysis:', error);
-            alert('Analysis failed. Check console for details.');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Run Analysis';
         }
     }
 

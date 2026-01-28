@@ -24,7 +24,7 @@ aegean_consensus:
   enabled: true
   beta_threshold: 2
   alpha_quorum: 1.0
-  sessions_between_analysis: 5
+  min_summaries_for_profile: 3
 
 condensation:
   hot_buffer_tokens: 4000

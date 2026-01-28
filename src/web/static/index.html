@@ -61,36 +61,29 @@
             margin-bottom: 12px;
         }
 
-        .analysis-btn {
-            width: 100%;
-            padding: 12px 16px;
-            background: rgba(201, 162, 39, 0.15);
-            border: 1px solid rgba(201, 162, 39, 0.3);
-            color: #c9a227;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.2s;
+        .analysis-progress {
             margin-bottom: 12px;
         }
 
-        .analysis-btn:hover:not(:disabled) {
-            background: rgba(201, 162, 39, 0.25);
-        }
-
-        .analysis-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .analysis-status {
-            font-size: 0.8rem;
+        .analysis-progress-label {
+            font-size: 0.75rem;
             color: #888;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
         }
 
-        .analysis-status .ready {
-            color: #4caf50;
+        .analysis-progress-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .analysis-progress-fill {
+            height: 100%;
+            background: #c9a227;
+            transition: width 0.3s;
         }
 
         .profile-panel {
@@ -426,8 +419,18 @@
                 <a href="/history" class="nav-tab">History</a>
                 <a href="#" class="nav-tab" id="analysis-tab" onclick="showAnalysis(event)">Analysis</a>
             </div>
+            <div id="analysis-progress" class="analysis-progress" style="padding: 0 16px;">
+                <div class="analysis-progress-label">
+                    <span>Memory</span>
+                    <span id="progress-text">-</span>
+                </div>
+                <div class="analysis-progress-bar">
+                    <div id="progress-fill" class="analysis-progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="summary-count" style="font-size: 0.7rem; color: #666; margin-top: 4px;"></div>
+            </div>
             <div class="profile-panel" id="profile-panel">
-                <div class="no-profile">No profile yet. Chat first, then run analysis.</div>
+                <div class="no-profile">No profile yet. Keep chatting to generate your profile automatically.</div>
             </div>
         </aside>
 
@@ -578,14 +581,12 @@
                 const headers = await getAuthHeaders();
                 const response = await fetch('/api/analysis/status', { headers });
                 const status = await response.json();
-                const statusEl = document.getElementById('analysis-status');
-                const btn = document.getElementById('analyze-btn');
 
-                if (status.can_analyze) {
-                    statusEl.innerHTML = `<span class="ready">${status.sessions_since_analysis} sessions ready</span>`;
-                } else {
-                    statusEl.innerHTML = `${status.sessions_since_analysis}/${status.threshold} sessions`;
-                }
+                const progress = Math.min(100, Math.round((status.uncondensed_tokens / status.condensation_threshold) * 100));
+                document.getElementById('progress-text').textContent = `${progress}%`;
+                document.getElementById('progress-fill').style.width = `${progress}%`;
+                document.getElementById('summary-count').textContent =
+                    status.summary_count > 0 ? `${status.summary_count} summaries` : '';
             } catch (error) {
                 console.error('Failed to load analysis status:', error);
             }
@@ -617,35 +618,12 @@
                         return;
                     }
                 }
-                panel.innerHTML = '<div class="no-profile">No profile yet. Chat first, then run analysis.</div>';
+                panel.innerHTML = '<div class="no-profile">No profile yet. Keep chatting to generate your profile automatically.</div>';
             } catch (error) {
                 console.error('Failed to load profile:', error);
             }
         }
 
-        async function runAnalysis() {
-            const btn = document.getElementById('analyze-btn');
-            btn.disabled = true;
-            btn.textContent = 'Analyzing...';
-
-            try {
-                const headers = await getAuthHeaders();
-                const response = await fetch('/api/analyze', { method: 'POST', headers });
-                if (response.ok) {
-                    await loadProfile();
-                    await loadAnalysisStatus();
-                } else {
-                    const error = await response.json();
-                    alert('Analysis failed: ' + (error.detail || 'Unknown error'));
-                }
-            } catch (error) {
-                console.error('Failed to run analysis:', error);
-                alert('Analysis failed. Check console for details.');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Run Analysis';
-            }
-        }
 
         function renderMarkdown(text) {
             return text
