@@ -5,27 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Stoic Emperor{% endblock %}</title>
     <link rel="icon" type="image/png" href="/static/favicon.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/output.css">
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        gold: {
-                            400: '#dab42f',
-                            500: '#c9a227',
-                            600: '#b8911f',
-                        },
-                        dark: {
-                            800: '#1a1a2e',
-                            900: '#16213e',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
     <style>
         body {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
@@ -42,7 +23,7 @@
     </style>
     {% block head %}{% endblock %}
 </head>
-<body class="min-h-screen text-gray-200 font-sans" hx-boost="true">
+<body class="min-h-screen text-gray-200 font-sans">
     <div class="flex h-screen">
         {% include "partials/sidebar.html" %}
 
@@ -53,15 +34,16 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        let supabaseClient = null;
-        let currentUser = null;
+        window.supabaseClient = window.supabaseClient || null;
+        window.currentUser = window.currentUser || null;
 
         async function initSupabase() {
+            if (window.supabaseClient) return;
             try {
                 const response = await fetch('/api/config');
                 const config = await response.json();
                 if (config.supabase_url && config.supabase_anon_key) {
-                    supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
+                    window.supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
                 }
             } catch (error) {
                 console.error('Failed to init Supabase:', error);
@@ -69,28 +51,75 @@
         }
 
         async function checkAuth() {
-            if (!supabaseClient) {
+            if (!window.supabaseClient) {
                 window.location.href = '/login';
                 return null;
             }
-            const { data: { session } } = await supabaseClient.auth.getSession();
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
             if (!session) {
                 window.location.href = '/login';
                 return null;
             }
-            currentUser = { id: session.user.id, email: session.user.email };
-            document.getElementById('user-email').textContent = currentUser.email;
+            window.currentUser = { id: session.user.id, email: session.user.email };
+            await loadUserDisplayName();
             return session;
         }
 
+        async function loadUserDisplayName() {
+            const nameEl = document.getElementById('user-name');
+            if (!nameEl) return;
+
+            try {
+                const headers = await getAuthHeaders();
+                const response = await fetch('/api/user', { headers });
+                if (response.ok) {
+                    const userInfo = await response.json();
+                    if (userInfo.name) {
+                        window.currentUser.displayName = userInfo.name;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+
+            if (window.currentUser.displayName) {
+                nameEl.textContent = window.currentUser.displayName;
+            } else if (window.currentUser.email) {
+                nameEl.textContent = window.currentUser.email.split('@')[0];
+            } else {
+                nameEl.textContent = 'User';
+            }
+        }
+
+        async function promptName() {
+            const currentName = window.currentUser?.displayName || '';
+            const newName = prompt('What would you like to be called?', currentName);
+            if (newName !== null && newName.trim() !== '') {
+                try {
+                    const headers = await getAuthHeaders();
+                    const response = await fetch('/api/user/name', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json', ...headers },
+                        body: JSON.stringify({ name: newName.trim() })
+                    });
+                    if (response.ok) {
+                        window.currentUser.displayName = newName.trim();
+                        document.getElementById('user-name').textContent = newName.trim();
+                    }
+                } catch (error) {
+                    console.error('Failed to update name:', error);
+                }
+            }
+        }
+
         async function getAuthHeaders() {
-            if (!supabaseClient) return {};
-            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!window.supabaseClient) return {};
+            const { data: { session } } = await window.supabaseClient.auth.getSession();
             return session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {};
         }
 
         async function signOut() {
-            if (supabaseClient) await supabaseClient.auth.signOut();
+            if (window.supabaseClient) await window.supabaseClient.auth.signOut();
             window.location.href = '/login';
         }
 

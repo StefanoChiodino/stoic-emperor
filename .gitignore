@@ -63,3 +63,9 @@ htmlcov/
 
 # Logs
 *.log
+
+# Tailwind build output
+src/web/static/output.css
+
+# Local binaries
+/bin/

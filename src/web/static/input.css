@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@source "../../templates/**/*.html";
+@source "../*.html";
+
+@theme {
+    --color-gold-400: #dab42f;
+    --color-gold-500: #c9a227;
+    --color-gold-600: #b8911f;
+    --color-dark-800: #1a1a2e;
+    --color-dark-900: #16213e;
+}

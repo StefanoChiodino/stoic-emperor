@@ -17,6 +17,7 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
@@ -121,7 +122,17 @@ class Database:
         self._session_factory = sessionmaker(bind=self.engine)
 
         Base.metadata.create_all(self.engine)
+        self._run_column_migrations()
         self._ensure_schema_version()
+
+    def _run_column_migrations(self) -> None:
+        from sqlalchemy import text, inspect as sa_inspect
+        inspector = sa_inspect(self.engine)
+        columns = {col["name"] for col in inspector.get_columns("users")}
+        if "name" not in columns:
+            with self.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN name TEXT"))
+                conn.commit()
 
     def _ensure_schema_version(self) -> None:
         with self._session() as session:
@@ -143,7 +154,7 @@ class Database:
 
     def create_user(self, user: User) -> User:
         with self._session() as session:
-            model = UserModel(id=user.id, created_at=user.created_at)
+            model = UserModel(id=user.id, name=user.name, created_at=user.created_at)
             session.add(model)
         return user
 
@@ -151,7 +162,7 @@ class Database:
         with self._session() as session:
             model = session.get(UserModel, user_id)
             if model:
-                return User(id=model.id, created_at=model.created_at)
+                return User(id=model.id, name=model.name, created_at=model.created_at)
         return None
 
     def get_or_create_user(self, user_id: str) -> User:
@@ -160,6 +171,14 @@ class Database:
             user = User(id=user_id)
             self.create_user(user)
         return user
+
+    def update_user_name(self, user_id: str, name: str) -> Optional[User]:
+        with self._session() as session:
+            model = session.get(UserModel, user_id)
+            if model:
+                model.name = name
+                return User(id=model.id, name=model.name, created_at=model.created_at)
+        return None
 
     def create_session(self, session_obj: Session) -> Session:
         with self._session() as session:
@@ -201,6 +220,25 @@ class Database:
                     metadata=model.metadata_ or {},
                 )
         return None
+
+    def get_user_sessions_with_counts(self, user_id: str) -> List[Dict[str, Any]]:
+        with self._session() as session:
+            stmt = (
+                select(
+                    SessionModel.id,
+                    SessionModel.created_at,
+                    func.count(MessageModel.id).label("message_count"),
+                )
+                .outerjoin(MessageModel, SessionModel.id == MessageModel.session_id)
+                .where(SessionModel.user_id == user_id)
+                .group_by(SessionModel.id, SessionModel.created_at)
+                .order_by(desc(SessionModel.created_at))
+            )
+            rows = session.execute(stmt).all()
+            return [
+                {"id": row.id, "created_at": row.created_at, "message_count": row.message_count}
+                for row in rows
+            ]
 
     def save_message(self, message: Message) -> Message:
         with self._session() as session:
@@ -319,6 +357,24 @@ class Database:
                     "consensus_log": model.consensus_log or {},
                 }
         return None
+
+    def save_profile(self, user_id: str, content: str, consensus_log: Optional[Dict[str, Any]] = None) -> int:
+        import uuid
+        with self._session() as session:
+            max_version = session.scalar(
+                select(func.max(ProfileModel.version)).where(ProfileModel.user_id == user_id)
+            )
+            version = (max_version or 0) + 1
+            model = ProfileModel(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                version=version,
+                content=content,
+                consensus_log=consensus_log,
+                created_at=datetime.now(),
+            )
+            session.add(model)
+        return version
 
     def save_condensed_summary(self, summary: CondensedSummary) -> CondensedSummary:
         with self._session() as session:

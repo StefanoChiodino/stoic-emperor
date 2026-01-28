@@ -92,6 +92,16 @@ class AnalysisStatus(BaseModel):
     has_profile: bool
 
 
+class UserInfo(BaseModel):
+    id: str
+    name: Optional[str] = None
+    created_at: datetime
+
+
+class UpdateNameRequest(BaseModel):
+    name: str
+
+
 @app.get("/")
 async def index(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request, "active_page": "chat"})
@@ -119,6 +129,20 @@ async def get_config():
         "supabase_anon_key": SUPABASE_ANON_KEY,
         "environment": ENVIRONMENT
     }
+
+
+@app.get("/api/user", response_model=UserInfo)
+async def get_user(user_id: str = Depends(get_current_user_id)):
+    user = db.get_or_create_user(user_id)
+    return UserInfo(id=user.id, name=user.name, created_at=user.created_at)
+
+
+@app.put("/api/user/name", response_model=UserInfo)
+async def update_user_name(request: UpdateNameRequest, user_id: str = Depends(get_current_user_id)):
+    user = db.update_user_name(user_id, request.name)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return UserInfo(id=user.id, name=user.name, created_at=user.created_at)
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -174,28 +198,15 @@ async def create_session(user_id: str = Depends(get_current_user_id)):
 @app.get("/api/sessions", response_model=list[SessionInfo])
 async def list_sessions(user_id: str = Depends(get_current_user_id)):
     user = db.get_or_create_user(user_id)
-    ph = db._placeholder()
-    with db._connection() as conn:
-        cursor = db._get_cursor(conn, dict_cursor=True)
-        cursor.execute(
-            f"""SELECT s.id, s.created_at, COUNT(m.id) as message_count
-               FROM sessions s
-               LEFT JOIN messages m ON s.id = m.session_id
-               WHERE s.user_id = {ph}
-               GROUP BY s.id, s.created_at
-               ORDER BY s.created_at DESC""",
-            (user.id,)
+    rows = db.get_user_sessions_with_counts(user.id)
+    return [
+        SessionInfo(
+            id=row["id"],
+            created_at=row["created_at"],
+            message_count=row["message_count"],
         )
-        rows = cursor.fetchall()
-        cursor.close()
-        return [
-            SessionInfo(
-                id=row["id"],
-                created_at=db._parse_timestamp(row["created_at"]),
-                message_count=row["message_count"]
-            )
-            for row in rows
-        ]
+        for row in rows
+    ]
 
 
 @app.get("/api/sessions/{session_id}/messages", response_model=list[MessageInfo])
@@ -225,10 +236,14 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
         consensus_reached = log.get("consensus_reached")
         stability_score = log.get("stability_score")
 
+    created_at = profile["created_at"]
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+
     return ProfileInfo(
         version=profile["version"],
         content=profile["content"],
-        created_at=datetime.fromisoformat(profile["created_at"]),
+        created_at=created_at,
         consensus_reached=consensus_reached,
         stability_score=stability_score
     )
@@ -267,10 +282,14 @@ async def run_analysis(user_id: str = Depends(get_current_user_id)):
         consensus_reached = log.get("consensus_reached")
         stability_score = log.get("stability_score")
 
+    created_at = profile["created_at"]
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at)
+
     return ProfileInfo(
         version=profile["version"],
         content=profile["content"],
-        created_at=datetime.fromisoformat(profile["created_at"]),
+        created_at=created_at,
         consensus_reached=consensus_reached,
         stability_score=stability_score
     )

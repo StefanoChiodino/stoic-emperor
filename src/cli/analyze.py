@@ -194,27 +194,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
 
 
 def _save_profile(db: Database, user_id: str, result: ConsensusResult) -> None:
-    with db._connection() as conn:
-        current_version = conn.execute(
-            "SELECT MAX(version) as v FROM profiles WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
-
-        version = (current_version["v"] or 0) + 1 if current_version else 1
-
-        import uuid
-        conn.execute(
-            """INSERT INTO profiles (id, user_id, version, content, consensus_log, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (
-                str(uuid.uuid4()),
-                user_id,
-                version,
-                result.final_output,
-                json.dumps(result.to_dict()),
-                datetime.now().isoformat()
-            )
-        )
+    db.save_profile(user_id, result.final_output, result.to_dict())
 
 
 if __name__ == "__main__":

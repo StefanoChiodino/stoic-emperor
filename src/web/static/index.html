@@ -349,13 +349,18 @@
             gap: 12px;
         }
 
-        .auth-user-email {
+        .auth-user-name {
             flex: 1;
             font-size: 0.85rem;
             color: #ccc;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .auth-user-name:hover {
+            color: #c9a227;
         }
 
         .auth-btn {
@@ -412,7 +417,7 @@
             </div>
             <div class="auth-section" id="auth-section">
                 <div class="auth-user">
-                    <span class="auth-user-email" id="user-email"></span>
+                    <span class="auth-user-name" id="user-name" onclick="promptName()" title="Click to change name"></span>
                     <button class="auth-btn" onclick="signOut()">Sign Out</button>
                 </div>
             </div>
@@ -485,32 +490,61 @@
             }
         }
 
-        async function initAuth() {
-            if (!supabaseClient) {
-                window.location.href = '/login';
-                return;
-            }
-
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                setUser({ id: session.user.id, email: session.user.email });
-            } else {
-                window.location.href = '/login';
-                return;
-            }
-
-            supabaseClient.auth.onAuthStateChange((event, session) => {
-                if (session) {
-                    setUser({ id: session.user.id, email: session.user.email });
-                } else {
-                    window.location.href = '/login';
-                }
-            });
-        }
-
         function setUser(user) {
             currentUser = user;
-            document.getElementById('user-email').textContent = user.email;
+            updateDisplayName();
+        }
+
+        function updateDisplayName() {
+            const nameEl = document.getElementById('user-name');
+            if (currentUser.displayName) {
+                nameEl.textContent = currentUser.displayName;
+            } else if (currentUser.email) {
+                nameEl.textContent = currentUser.email.split('@')[0];
+            } else {
+                nameEl.textContent = 'User';
+            }
+        }
+
+        async function loadUserInfo() {
+            try {
+                const headers = await getAuthHeaders();
+                const response = await fetch('/api/user', { headers });
+                if (response.ok) {
+                    const userInfo = await response.json();
+                    if (userInfo.name) {
+                        currentUser.displayName = userInfo.name;
+                        updateDisplayName();
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+        }
+
+        async function promptName() {
+            const currentName = currentUser.displayName || '';
+            const newName = prompt('What would you like to be called?', currentName);
+            if (newName !== null && newName.trim() !== '') {
+                await updateName(newName.trim());
+            }
+        }
+
+        async function updateName(name) {
+            try {
+                const headers = await getAuthHeaders();
+                const response = await fetch('/api/user/name', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', ...headers },
+                    body: JSON.stringify({ name })
+                });
+                if (response.ok) {
+                    currentUser.displayName = name;
+                    updateDisplayName();
+                }
+            } catch (error) {
+                console.error('Failed to update name:', error);
+            }
         }
 
         async function signOut() {
@@ -532,6 +566,7 @@
         async function loadUserData() {
             currentSessionId = null;
             await Promise.all([
+                loadUserInfo(),
                 loadLatestSession(),
                 loadAnalysisStatus(),
                 loadProfile()
@@ -759,21 +794,35 @@
         }
 
         async function init() {
-            await initSupabase();
+            try {
+                await initSupabase();
 
-            let session = null;
-            if (supabaseClient) {
-                const { data } = await supabaseClient.auth.getSession();
-                session = data.session;
+                if (!supabaseClient) {
+                    console.error('Supabase client not initialized');
+                    window.location.href = '/login';
+                    return;
+                }
+
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (!session) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                setUser({ id: session.user.id, email: session.user.email });
+
+                supabaseClient.auth.onAuthStateChange((event, session) => {
+                    if (session) {
+                        setUser({ id: session.user.id, email: session.user.email });
+                    } else {
+                        window.location.href = '/login';
+                    }
+                });
+
+                await loadUserData();
+            } catch (error) {
+                console.error('Init failed:', error);
             }
-
-            if (!session) {
-                window.location.href = '/login';
-                return;
-            }
-
-            await initAuth();
-            await loadUserData();
         }
 
         init();
