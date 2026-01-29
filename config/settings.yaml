@@ -1,6 +1,7 @@
 models:
   main: "${LLM_MAIN_MODEL}"
   reviewer: "${LLM_REVIEWER_MODEL}"
+  light: "${LLM_LIGHT_MODEL}"
 
 database:
   url: "${DATABASE_URL:-sqlite:///./data/stoic_emperor.db}"

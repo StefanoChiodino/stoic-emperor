@@ -1,13 +1,15 @@
+import sys
+print("Python started", flush=True)
+
 from src.utils.privacy import disable_telemetry
 disable_telemetry()
 
 import os
-import sys
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-print("Starting imports...", file=sys.stderr, flush=True)
+print("Starting imports...", flush=True)
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
@@ -19,19 +21,19 @@ from src.models.schemas import Session, Message, User
 from src.utils.config import load_config
 from src.utils.auth import get_user_id_from_token, optional_auth, security
 
-print("Imports complete, creating app...", file=sys.stderr, flush=True)
+print("Imports complete, creating app...", flush=True)
 
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
-    print("FastAPI startup complete", file=sys.stderr, flush=True)
+    print("FastAPI startup complete", flush=True)
     yield
-    print("FastAPI shutdown", file=sys.stderr, flush=True)
+    print("FastAPI shutdown", flush=True)
 
 app = FastAPI(title="Stoic Emperor", docs_url="/api/docs", lifespan=lifespan)
 
-print("App created", file=sys.stderr, flush=True)
+print("App created", flush=True)
 
 _state = {"initialized": False, "config": {}, "db": None, "vectors": None, "brain": None, "condensation": None}
 
@@ -43,12 +45,18 @@ def _init():
     from src.infrastructure.database import Database
     from src.infrastructure.vector_store import VectorStore
     from src.memory.condensation import CondensationManager
+    from src.memory.episodic import EpisodicMemory
 
     _state["config"] = load_config()
     _state["db"] = Database(_state["config"]["database"]["url"])
     _state["vectors"] = VectorStore(_state["config"]["database"]["url"])
     _state["brain"] = EmperorBrain(config=_state["config"])
     _state["condensation"] = CondensationManager(_state["db"], _state["config"])
+    _state["episodic"] = EpisodicMemory(
+        _state["db"],
+        _state["vectors"],
+        _state["config"]["memory"]["max_context_tokens"]
+    )
     _state["initialized"] = True
 
 
@@ -201,6 +209,10 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     history.append(user_msg)
 
     retrieved_context = _retrieve_context(request.message, user.id)
+    profile = db.get_latest_profile(user.id)
+    if profile:
+        retrieved_context["profile"] = profile["content"]
+
     response = brain.respond(
         user_message=request.message,
         conversation_history=history,
@@ -214,6 +226,16 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
         psych_update=response.psych_update
     )
     db.save_message(emperor_msg)
+
+    try:
+        _state["episodic"].store_turn(
+            user_id=user.id,
+            session_id=session.id,
+            user_message=request.message,
+            emperor_response=response.response_text
+        )
+    except Exception:
+        pass
 
     _maybe_condense_and_analyze(user.id)
 

@@ -21,6 +21,7 @@ RUN tailwindcss -i ./src/web/static/input.css -o ./src/web/static/output.css --m
 
 ENV PYTHONPATH=/app
 ENV ENVIRONMENT=production
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 

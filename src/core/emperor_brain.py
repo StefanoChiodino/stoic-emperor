@@ -36,7 +36,11 @@ class EmperorBrain:
     ) -> EmperorResponse:
         prompt_parts = []
 
+        profile_text = "No profile yet - this is a new user."
         if retrieved_context:
+            if retrieved_context.get("profile"):
+                profile_text = retrieved_context["profile"]
+
             if retrieved_context.get("stoic"):
                 prompt_parts.append("## Relevant Stoic Wisdom")
                 for item in retrieved_context["stoic"][:3]:
@@ -62,10 +66,11 @@ class EmperorBrain:
         prompt_parts.append("\nRespond with the JSON object as specified.")
 
         full_prompt = "\n".join(prompt_parts)
+        system_prompt = self._system_prompt.format(profile=profile_text)
 
         response_text = self.llm.generate(
             prompt=full_prompt,
-            system_prompt=self._system_prompt,
+            system_prompt=system_prompt,
             model=self.model,
             temperature=0.7,
             max_tokens=2000,
@@ -122,7 +127,7 @@ class EmperorBrain:
         return self.llm.generate(
             prompt=prompt,
             system_prompt="You are a search query expansion assistant.",
-            model=self.config["models"]["main"],
+            model=self.config["models"].get("light", self.config["models"]["main"]),
             temperature=0.3,
             max_tokens=200
         )
