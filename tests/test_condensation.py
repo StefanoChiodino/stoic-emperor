@@ -1,25 +1,23 @@
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.infrastructure.database import Database
-from src.models.schemas import User, Session, Message, CondensedSummary, PsychUpdate
 from src.memory.condensation import CondensationManager
 from src.memory.context_builder import ContextBuilder
+from src.models.schemas import CondensedSummary, Message, PsychUpdate, Session, User
 
 
 @pytest.fixture
 def test_config():
     return {
-        "models": {
-            "main": "gpt-4o-mini",
-            "reviewer": "gpt-4o-mini"
-        },
+        "models": {"main": "gpt-4o-mini", "reviewer": "gpt-4o-mini"},
         "condensation": {
             "hot_buffer_tokens": 100,
             "chunk_threshold_tokens": 200,
             "summary_budget_tokens": 300,
-            "use_consensus": False
+            "use_consensus": False,
         },
         "prompts": {
             "condensation": """
@@ -28,7 +26,7 @@ Period: {period_start} to {period_end}
 Messages: {message_count}, Words: {word_count}
 Previous: {previous_context}
 """
-        }
+        },
     }
 
 
@@ -48,10 +46,7 @@ def db_with_messages(test_db_path):
         msg_time = base_time + timedelta(minutes=i * 10)
 
         user_msg = Message(
-            session_id=session.id,
-            role="user",
-            content=f"User message {i}: " + "word " * 20,
-            created_at=msg_time
+            session_id=session.id, role="user", content=f"User message {i}: " + "word " * 20, created_at=msg_time
         )
         db.save_message(user_msg)
         messages.append(user_msg)
@@ -61,7 +56,7 @@ def db_with_messages(test_db_path):
             emotional_state="neutral",
             stoic_principle_applied="test",
             suggested_next_direction="continue",
-            confidence=0.8
+            confidence=0.8,
         )
 
         emperor_msg = Message(
@@ -69,7 +64,7 @@ def db_with_messages(test_db_path):
             role="emperor",
             content=f"Emperor response {i}: " + "word " * 20,
             psych_update=psych_update,
-            created_at=msg_time + timedelta(seconds=30)
+            created_at=msg_time + timedelta(seconds=30),
         )
         db.save_message(emperor_msg)
         messages.append(emperor_msg)
@@ -85,7 +80,7 @@ class TestCondensationManager:
         assert manager.hot_buffer_tokens == 100
         assert manager.chunk_threshold_tokens == 200
         assert manager.summary_budget_tokens == 300
-        assert manager.use_consensus == False
+        assert not manager.use_consensus
 
     def test_estimate_tokens(self, test_db_path, test_config):
         db = Database(test_db_path)
@@ -118,17 +113,12 @@ class TestCondensationManager:
         session = Session(user_id=user.id)
         db.create_session(session)
 
-        msg = Message(
-            session_id=session.id,
-            role="user",
-            content="Short message",
-            created_at=datetime.now()
-        )
+        msg = Message(session_id=session.id, role="user", content="Short message", created_at=datetime.now())
         db.save_message(msg)
 
         manager = CondensationManager(db, test_config)
 
-        assert manager.should_condense(user.id) == False
+        assert not manager.should_condense(user.id)
 
     def test_should_condense_true_when_above_threshold(self, db_with_messages, test_config):
         db, user, session, messages = db_with_messages
@@ -138,7 +128,7 @@ class TestCondensationManager:
 
         assert isinstance(should, bool)
 
-    @patch('openai.OpenAI')
+    @patch("openai.OpenAI")
     def test_condense_chunk_creates_summary(self, mock_openai_class, db_with_messages, test_config):
         db, user, session, messages = db_with_messages
         manager = CondensationManager(db, test_config)
@@ -163,7 +153,7 @@ class TestCondensationManager:
         assert summary.period_start == chunk_messages[0].created_at
         assert summary.period_end == chunk_messages[-1].created_at
 
-    @patch('openai.OpenAI')
+    @patch("openai.OpenAI")
     def test_condense_summaries_creates_higher_level(self, mock_openai_class, test_db_path, test_config):
         db = Database(test_db_path)
         user = User(id="test_user")
@@ -182,7 +172,7 @@ class TestCondensationManager:
             period_start=datetime(2024, 1, 1),
             period_end=datetime(2024, 1, 2),
             source_message_count=10,
-            source_word_count=100
+            source_word_count=100,
         )
         db.save_condensed_summary(summary1)
 
@@ -193,7 +183,7 @@ class TestCondensationManager:
             period_start=datetime(2024, 1, 3),
             period_end=datetime(2024, 1, 4),
             source_message_count=10,
-            source_word_count=100
+            source_word_count=100,
         )
         db.save_condensed_summary(summary2)
 
@@ -217,10 +207,10 @@ class TestCondensationManager:
                 user_id=user.id,
                 level=1,
                 content="x" * 100,
-                period_start=datetime(2024, 1, i+1),
-                period_end=datetime(2024, 1, i+2),
+                period_start=datetime(2024, 1, i + 1),
+                period_end=datetime(2024, 1, i + 2),
                 source_message_count=10,
-                source_word_count=100
+                source_word_count=100,
             )
             db.save_condensed_summary(summary)
 
@@ -244,7 +234,7 @@ class TestCondensationManager:
             period_start=datetime(2024, 1, 1),
             period_end=datetime(2024, 1, 5),
             source_message_count=10,
-            source_word_count=100
+            source_word_count=100,
         )
         db.save_condensed_summary(l1_summary)
 
@@ -256,7 +246,7 @@ class TestCondensationManager:
             period_end=datetime(2024, 1, 5),
             source_message_count=10,
             source_word_count=100,
-            source_summary_ids=[l1_summary.id]
+            source_summary_ids=[l1_summary.id],
         )
         db.save_condensed_summary(l2_summary)
 
@@ -266,14 +256,12 @@ class TestCondensationManager:
 
         assert any(s.level == 2 for s in selected)
         has_l1_for_same_period = any(
-            s.level == 1 and
-            s.period_start == l1_summary.period_start and
-            s.period_end == l1_summary.period_end
+            s.level == 1 and s.period_start == l1_summary.period_start and s.period_end == l1_summary.period_end
             for s in selected
         )
         assert not has_l1_for_same_period
 
-    @patch('openai.OpenAI')
+    @patch("openai.OpenAI")
     def test_maybe_condense_triggers_when_threshold_exceeded(self, mock_openai_class, db_with_messages, test_config):
         db, user, session, messages = db_with_messages
 
@@ -336,16 +324,11 @@ class TestContextBuilder:
             period_start=datetime(2024, 1, 1),
             period_end=datetime(2024, 1, 5),
             source_message_count=20,
-            source_word_count=200
+            source_word_count=200,
         )
         db.save_condensed_summary(summary)
 
-        msg = Message(
-            session_id=session.id,
-            role="user",
-            content="Recent message",
-            created_at=datetime(2024, 1, 10)
-        )
+        msg = Message(session_id=session.id, role="user", content="Recent message", created_at=datetime(2024, 1, 10))
         db.save_message(msg)
 
         builder = ContextBuilder(db, test_config)
@@ -370,22 +353,14 @@ class TestContextBuilder:
             period_start=datetime(2024, 1, 1),
             period_end=datetime(2024, 1, 5),
             source_message_count=10,
-            source_word_count=100
+            source_word_count=100,
         )
 
-        msg = Message(
-            session_id=session.id,
-            role="user",
-            content="Hello",
-            created_at=datetime(2024, 1, 10)
-        )
+        msg = Message(session_id=session.id, role="user", content="Hello", created_at=datetime(2024, 1, 10))
 
         builder = ContextBuilder(db, test_config)
 
-        context = {
-            "condensed_summaries": [summary],
-            "recent_messages": [msg]
-        }
+        context = {"condensed_summaries": [summary], "recent_messages": [msg]}
 
         formatted = builder.format_context_string(context)
 
@@ -407,7 +382,7 @@ class TestContextBuilder:
                 period_start=datetime(2024, 1, 1),
                 period_end=datetime(2024, 1, 5),
                 source_message_count=10,
-                source_word_count=100
+                source_word_count=100,
             )
             db.save_condensed_summary(summary)
 
@@ -436,7 +411,7 @@ class TestDatabaseCondensedSummaryOperations:
             source_message_count=10,
             source_word_count=100,
             source_summary_ids=["id1", "id2"],
-            consensus_log={"consensus_reached": True}
+            consensus_log={"consensus_reached": True},
         )
 
         saved = db.save_condensed_summary(summary)
@@ -454,10 +429,10 @@ class TestDatabaseCondensedSummaryOperations:
                 user_id=user.id,
                 level=1,
                 content=f"Summary {i}",
-                period_start=datetime(2024, 1, i+1),
-                period_end=datetime(2024, 1, i+2),
+                period_start=datetime(2024, 1, i + 1),
+                period_end=datetime(2024, 1, i + 2),
                 source_message_count=10,
-                source_word_count=100
+                source_word_count=100,
             )
             db.save_condensed_summary(summary)
 
@@ -478,7 +453,7 @@ class TestDatabaseCondensedSummaryOperations:
                 period_start=datetime(2024, 1, 1),
                 period_end=datetime(2024, 1, 5),
                 source_message_count=10,
-                source_word_count=100
+                source_word_count=100,
             )
             db.save_condensed_summary(summary)
 
@@ -495,26 +470,13 @@ class TestDatabaseCondensedSummaryOperations:
         session = Session(user_id=user.id)
         db.create_session(session)
 
-        dates = [
-            datetime(2024, 1, 1),
-            datetime(2024, 1, 5),
-            datetime(2024, 1, 10)
-        ]
+        dates = [datetime(2024, 1, 1), datetime(2024, 1, 5), datetime(2024, 1, 10)]
 
         for date in dates:
-            msg = Message(
-                session_id=session.id,
-                role="user",
-                content="Message",
-                created_at=date
-            )
+            msg = Message(session_id=session.id, role="user", content="Message", created_at=date)
             db.save_message(msg)
 
-        messages = db.get_messages_in_range(
-            user.id,
-            start_date=datetime(2024, 1, 3),
-            end_date=datetime(2024, 1, 7)
-        )
+        messages = db.get_messages_in_range(user.id, start_date=datetime(2024, 1, 3), end_date=datetime(2024, 1, 7))
 
         assert len(messages) == 1
         assert messages[0].created_at == datetime(2024, 1, 5)

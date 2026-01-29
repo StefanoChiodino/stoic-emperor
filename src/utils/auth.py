@@ -1,9 +1,8 @@
 import os
-from typing import Optional
 
 from fastapi import HTTPException, Security, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
 security = HTTPBearer(auto_error=False)
 
@@ -12,8 +11,7 @@ def get_supabase_jwt_secret() -> str:
     secret = os.getenv("SUPABASE_JWT_SECRET")
     if not secret:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SUPABASE_JWT_SECRET not configured"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="SUPABASE_JWT_SECRET not configured"
         )
     return secret
 
@@ -21,18 +19,13 @@ def get_supabase_jwt_secret() -> str:
 def verify_supabase_token(token: str) -> dict:
     try:
         secret = get_supabase_jwt_secret()
-        payload = jwt.decode(
-            token,
-            secret,
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
+        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
         return payload
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {str(e)}"
-        )
+            detail=f"Invalid token: {e!s}",
+        ) from None
 
 
 def get_user_id_from_token(credentials: HTTPAuthorizationCredentials) -> str:
@@ -40,14 +33,11 @@ def get_user_id_from_token(credentials: HTTPAuthorizationCredentials) -> str:
     payload = verify_supabase_token(token)
     user_id = payload.get("sub")
     if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: missing user ID"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token: missing user ID")
     return user_id
 
 
-def optional_auth(credentials: Optional[HTTPAuthorizationCredentials] = Security(security)) -> Optional[str]:
+def optional_auth(credentials: HTTPAuthorizationCredentials | None = Security(security)) -> str | None:
     if not credentials:
         return None
     try:

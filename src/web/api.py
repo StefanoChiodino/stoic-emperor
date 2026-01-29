@@ -1,38 +1,40 @@
-import sys
 print("Python started", flush=True)
 
 from src.utils.privacy import disable_telemetry
+
 disable_telemetry()
 
 from src.utils.config import load_env
+
 load_env()
 
 import os
-from pathlib import Path
-from typing import Optional
 from datetime import datetime
+from pathlib import Path
 
 print("Starting imports...", flush=True)
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-from src.models.schemas import Session, Message, User, SemanticInsight
+from src.models.schemas import Message, SemanticInsight, Session
+from src.utils.auth import security
 from src.utils.config import load_config
-from src.utils.auth import get_user_id_from_token, optional_auth, security
 
 print("Imports complete, creating app...", flush=True)
 
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app):
     print("FastAPI startup complete", flush=True)
     yield
     print("FastAPI shutdown", flush=True)
+
 
 app = FastAPI(title="Stoic Emperor", docs_url="/api/docs", lifespan=lifespan)
 
@@ -56,9 +58,7 @@ def _init():
     _state["brain"] = EmperorBrain(config=_state["config"])
     _state["condensation"] = CondensationManager(_state["db"], _state["config"])
     _state["episodic"] = EpisodicMemory(
-        _state["db"],
-        _state["vectors"],
-        _state["config"]["memory"]["max_context_tokens"]
+        _state["db"], _state["vectors"], _state["config"]["memory"]["max_context_tokens"]
     )
     _state["initialized"] = True
 
@@ -67,13 +67,14 @@ def _init():
 async def health():
     return {"status": "ok"}
 
+
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 DEFAULT_USER_ID = "default_user"
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 
-def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> str:
+def get_current_user_id(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> str:
     if ENVIRONMENT == "development" and not credentials:
         return DEFAULT_USER_ID
 
@@ -82,11 +83,13 @@ def get_current_user_id(credentials: Optional[HTTPAuthorizationCredentials] = De
 
     try:
         from src.utils.auth import get_user_id_from_token
+
         return get_user_id_from_token(credentials)
-    except Exception as e:
+    except Exception:
         if ENVIRONMENT == "development":
             return DEFAULT_USER_ID
         raise
+
 
 static_path = Path(__file__).parent / "static"
 templates_path = Path(__file__).parent / "templates"
@@ -96,7 +99,7 @@ templates = Jinja2Templates(directory=templates_path)
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -122,8 +125,8 @@ class ProfileInfo(BaseModel):
     version: int
     content: str
     created_at: datetime
-    consensus_reached: Optional[bool] = None
-    stability_score: Optional[float] = None
+    consensus_reached: bool | None = None
+    stability_score: float | None = None
 
 
 class AnalysisStatus(BaseModel):
@@ -135,7 +138,7 @@ class AnalysisStatus(BaseModel):
 
 class UserInfo(BaseModel):
     id: str
-    name: Optional[str] = None
+    name: str | None = None
     created_at: datetime
 
 
@@ -165,11 +168,7 @@ async def analysis(request: Request):
 
 @app.get("/api/config")
 async def get_config():
-    return {
-        "supabase_url": SUPABASE_URL,
-        "supabase_anon_key": SUPABASE_ANON_KEY,
-        "environment": ENVIRONMENT
-    }
+    return {"supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY, "environment": ENVIRONMENT}
 
 
 @app.get("/api/user", response_model=UserInfo)
@@ -221,16 +220,11 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
         retrieved_context["narrative"] = "\n\n".join(s.content for s in summaries)
 
     response = brain.respond(
-        user_message=request.message,
-        conversation_history=history,
-        retrieved_context=retrieved_context
+        user_message=request.message, conversation_history=history, retrieved_context=retrieved_context
     )
 
     emperor_msg = Message(
-        session_id=session.id,
-        role="emperor",
-        content=response.response_text,
-        psych_update=response.psych_update
+        session_id=session.id, role="emperor", content=response.response_text, psych_update=response.psych_update
     )
     db.save_message(emperor_msg)
 
@@ -239,7 +233,7 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
             user_id=user.id,
             session_id=session.id,
             user_message=request.message,
-            emperor_response=response.response_text
+            emperor_response=response.response_text,
         )
     except Exception:
         pass
@@ -253,29 +247,27 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
                         user_id=user.id,
                         source_message_id=emperor_msg.id,
                         assertion=assertion.text,
-                        confidence=assertion.confidence
+                        confidence=assertion.confidence,
                     )
                     db.save_semantic_insight(insight)
                     vectors.add(
                         collection="semantic",
                         ids=[insight.id],
                         documents=[assertion.text],
-                        metadatas=[{
-                            "user_id": user.id,
-                            "source_message_id": emperor_msg.id,
-                            "confidence": assertion.confidence
-                        }]
+                        metadatas=[
+                            {
+                                "user_id": user.id,
+                                "source_message_id": emperor_msg.id,
+                                "confidence": assertion.confidence,
+                            }
+                        ],
                     )
                 except Exception:
                     pass
 
     _maybe_condense_and_analyze(user.id)
 
-    return ChatResponse(
-        response=response.response_text,
-        session_id=session.id,
-        message_id=emperor_msg.id
-    )
+    return ChatResponse(response=response.response_text, session_id=session.id, message_id=emperor_msg.id)
 
 
 @app.post("/api/sessions", response_model=SessionInfo)
@@ -313,13 +305,10 @@ async def get_session_messages(session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
 
     messages = db.get_session_messages(session_id)
-    return [
-        MessageInfo(id=m.id, role=m.role, content=m.content, created_at=m.created_at)
-        for m in messages
-    ]
+    return [MessageInfo(id=m.id, role=m.role, content=m.content, created_at=m.created_at) for m in messages]
 
 
-@app.get("/api/profile", response_model=Optional[ProfileInfo])
+@app.get("/api/profile", response_model=ProfileInfo | None)
 async def get_profile(user_id: str = Depends(get_current_user_id)):
     _init()
     db = _state["db"]
@@ -344,7 +333,7 @@ async def get_profile(user_id: str = Depends(get_current_user_id)):
         content=profile["content"],
         created_at=created_at,
         consensus_reached=consensus_reached,
-        stability_score=stability_score
+        stability_score=stability_score,
     )
 
 
@@ -363,7 +352,7 @@ async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
         uncondensed_tokens=uncondensed_tokens,
         condensation_threshold=condensation.chunk_threshold_tokens,
         summary_count=len(summaries),
-        has_profile=profile is not None
+        has_profile=profile is not None,
     )
 
 
@@ -387,6 +376,7 @@ def _maybe_update_profile(user_id: str) -> None:
     profile = db.get_latest_profile(user_id)
     if profile:
         from datetime import datetime
+
         last_profile_time = profile["created_at"]
         if isinstance(last_profile_time, str):
             last_profile_time = datetime.fromisoformat(last_profile_time)
@@ -396,6 +386,7 @@ def _maybe_update_profile(user_id: str) -> None:
 
     try:
         from src.cli.analyze import main as run_analysis_main
+
         run_analysis_main(user_id=user_id, force=True, show=False)
     except Exception:
         pass
@@ -428,24 +419,14 @@ def _retrieve_context(user_message: str, user_id: str) -> dict:
         pass
 
     try:
-        insight_results = vectors.query(
-            "semantic",
-            query_texts=[query_text],
-            n_results=5,
-            where={"user_id": user_id}
-        )
+        insight_results = vectors.query("semantic", query_texts=[query_text], n_results=5, where={"user_id": user_id})
         if insight_results.get("documents") and insight_results["documents"][0]:
             context["insights"] = insight_results["documents"][0]
     except Exception:
         pass
 
     try:
-        episodic_results = vectors.query(
-            "episodic",
-            query_texts=[query_text],
-            n_results=3,
-            where={"user_id": user_id}
-        )
+        episodic_results = vectors.query("episodic", query_texts=[query_text], n_results=3, where={"user_id": user_id})
         if episodic_results.get("documents") and episodic_results["documents"][0]:
             context["episodic"] = episodic_results["documents"][0]
     except Exception:

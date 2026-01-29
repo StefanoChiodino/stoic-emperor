@@ -1,23 +1,20 @@
 # PRIVACY: Must be first import
 from src.utils.privacy import disable_telemetry
+
 disable_telemetry()
 
-import json
-from datetime import datetime
-from typing import Optional
-from pathlib import Path
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.markdown import Markdown
+from rich.panel import Panel
 
 from src.core.aegean_consensus import AegeanConsensusProtocol, ConsensusResult
+from src.core.emperor_brain import EmperorBrain
 from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
-from src.memory.semantic import SemanticMemory
 from src.memory.condensation import CondensationManager
 from src.memory.context_builder import ContextBuilder
-from src.core.emperor_brain import EmperorBrain
+from src.memory.semantic import SemanticMemory
 from src.utils.config import load_config
 
 console = Console()
@@ -58,11 +55,12 @@ def show_latest_profile(user_id: str) -> bool:
         console.print("[yellow]No profile found. Run analysis first.[/yellow]")
         return False
 
-    console.print(Panel.fit(
-        f"[bold]PSYCHOLOGICAL PROFILE[/bold]\n"
-        f"[dim]Version {profile['version']} • {profile['created_at']}[/dim]",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]PSYCHOLOGICAL PROFILE[/bold]\n[dim]Version {profile['version']} • {profile['created_at']}[/dim]",
+            border_style="blue",
+        )
+    )
 
     if profile.get("consensus_log"):
         log = profile["consensus_log"]
@@ -74,12 +72,9 @@ def show_latest_profile(user_id: str) -> bool:
             console.print(f"[dim]Stability score: {log['stability_score']:.2f}[/dim]")
 
     console.print()
-    console.print(Panel(
-        Markdown(profile["content"]),
-        title="[bold blue]Profile[/bold blue]",
-        border_style="blue",
-        padding=(1, 2)
-    ))
+    console.print(
+        Panel(Markdown(profile["content"]), title="[bold blue]Profile[/bold blue]", border_style="blue", padding=(1, 2))
+    )
     return True
 
 
@@ -92,7 +87,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
     vectors = VectorStore(config["database"]["url"])
     brain = EmperorBrain(config=config)
     condensation = CondensationManager(db, config)
-    context_builder = ContextBuilder(db, config)
+    _ = ContextBuilder(db, config)
 
     sessions_since = db.count_sessions_since_last_analysis(user_id)
     threshold = config.get("aegean_consensus", {}).get("sessions_between_analysis", 5)
@@ -102,11 +97,9 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         console.print("[dim]Use --force to run anyway.[/dim]")
         return
 
-    console.print(Panel.fit(
-        "[bold]PSYCHOLOGICAL ANALYSIS[/bold]\n"
-        "[dim]Aegean Consensus Protocol[/dim]",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit("[bold]PSYCHOLOGICAL ANALYSIS[/bold]\n[dim]Aegean Consensus Protocol[/dim]", border_style="blue")
+    )
 
     console.print("\n[dim]Processing unprocessed messages...[/dim]")
     semantic = SemanticMemory(db, vectors, brain)
@@ -121,19 +114,23 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
     condensed_history = ""
     if summaries:
         summaries.sort(key=lambda s: s.period_start)
-        condensed_history = "\n\n".join([
-            f"### Period: {s.period_start.strftime('%Y-%m-%d')} to {s.period_end.strftime('%Y-%m-%d')} "
-            f"(Level {s.level}, {s.source_message_count} messages, {s.source_word_count} words)\n{s.content}"
-            for s in summaries
-        ])
+        condensed_history = "\n\n".join(
+            [
+                f"### Period: {s.period_start.strftime('%Y-%m-%d')} to {s.period_end.strftime('%Y-%m-%d')} "
+                f"(Level {s.level}, {s.source_message_count} messages, {s.source_word_count} words)\n{s.content}"
+                for s in summaries
+            ]
+        )
         console.print(f"[green]Found {len(summaries)} condensed summaries.[/green]")
     else:
         recent_messages = db.get_recent_messages(user_id, limit=50)
         if recent_messages:
-            condensed_history = "\n\n".join([
-                f"[{msg.created_at.strftime('%Y-%m-%d %H:%M')}] {msg.role.upper()}: {msg.content}"
-                for msg in recent_messages
-            ])
+            condensed_history = "\n\n".join(
+                [
+                    f"[{msg.created_at.strftime('%Y-%m-%d %H:%M')}] {msg.role.upper()}: {msg.content}"
+                    for msg in recent_messages
+                ]
+            )
             console.print("[yellow]No condensed summaries yet. Using recent messages.[/yellow]")
         else:
             console.print("[yellow]No conversation history found.[/yellow]")
@@ -145,7 +142,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         insights_text = "\n".join([f"- {i.assertion} (confidence: {i.confidence:.2f})" for i in insights])
         console.print(f"[dim]Found {len(insights)} semantic insights.[/dim]")
 
-    console.print(f"\n[dim]Running consensus analysis...[/dim]")
+    console.print("\n[dim]Running consensus analysis...[/dim]")
 
     prompts = {"profile_synthesis": PROFILE_SYNTHESIS_PROMPT}
 
@@ -154,7 +151,7 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
         model_b=config["models"]["reviewer"],
         prompts=prompts,
         beta_threshold=config.get("aegean_consensus", {}).get("beta_threshold", 2),
-        verbose=True
+        verbose=True,
     )
 
     with console.status("[dim]Dual-model consensus in progress...[/dim]"):
@@ -164,9 +161,9 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
                 "condensed_history": condensed_history,
                 "insights": insights_text if insights_text else "None",
                 "session_count": sessions_since,
-                "source_data": condensed_history
+                "source_data": condensed_history,
             },
-            critical_constructs=["attachment patterns", "defense mechanisms", "core beliefs"]
+            critical_constructs=["attachment patterns", "defense mechanisms", "core beliefs"],
         )
 
     _save_profile(db, user_id, result)
@@ -185,12 +182,14 @@ def main(user_id: str = DEFAULT_USER_ID, force: bool = False, show: bool = False
             console.print(f"  - {flag}")
 
     console.print()
-    console.print(Panel(
-        Markdown(result.final_output),
-        title="[bold blue]Psychological Profile[/bold blue]",
-        border_style="blue",
-        padding=(1, 2)
-    ))
+    console.print(
+        Panel(
+            Markdown(result.final_output),
+            title="[bold blue]Psychological Profile[/bold blue]",
+            border_style="blue",
+            padding=(1, 2),
+        )
+    )
 
 
 def _save_profile(db: Database, user_id: str, result: ConsensusResult) -> None:
@@ -199,6 +198,7 @@ def _save_profile(db: Database, user_id: str, result: ConsensusResult) -> None:
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Run psychological analysis with Aegean consensus")
     parser.add_argument("--user", default=DEFAULT_USER_ID, help="User ID")
     parser.add_argument("--force", action="store_true", help="Force analysis regardless of session count")

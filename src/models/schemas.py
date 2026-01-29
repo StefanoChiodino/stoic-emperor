@@ -1,39 +1,45 @@
-from typing import List, Optional, Dict, Any
-from datetime import datetime
-from pydantic import BaseModel, Field
 import uuid
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
 
 class SemanticAssertion(BaseModel):
     """A fact about the user worth remembering long-term"""
+
     text: str = Field(description="A factual statement about the user")
     confidence: float = Field(description="Confidence score 0.0-1.0", ge=0.0, le=1.0)
 
 
 class PsychUpdate(BaseModel):
     """Hidden psychological analysis layer"""
-    detected_patterns: List[str] = Field(description="List of detected cognitive patterns or distortions")
+
+    detected_patterns: list[str] = Field(description="List of detected cognitive patterns or distortions")
     emotional_state: str = Field(description="Current emotional state of the user")
     stoic_principle_applied: str = Field(description="The Stoic principle relevant to this situation")
     suggested_next_direction: str = Field(description="Internal strategy note for the therapist")
     confidence: float = Field(description="Confidence score 0.0-1.0")
-    semantic_assertions: List[SemanticAssertion] = Field(
-        default_factory=list,
-        description="0-3 new facts about the user worth remembering long-term"
+    semantic_assertions: list[SemanticAssertion] = Field(
+        default_factory=list, description="0-3 new facts about the user worth remembering long-term"
     )
+
 
 class EmperorResponse(BaseModel):
     """Full response from the Emperor"""
+
     response_text: str = Field(description="The visible response to the user")
     psych_update: PsychUpdate = Field(description="The hidden analysis")
+
 
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
     role: str  # 'user' or 'emperor'
     content: str
-    psych_update: Optional[PsychUpdate] = None
+    psych_update: PsychUpdate | None = None
     created_at: datetime = Field(default_factory=datetime.now)
-    semantic_processed_at: Optional[datetime] = None
+    semantic_processed_at: datetime | None = None
 
 
 class SemanticInsight(BaseModel):
@@ -44,16 +50,19 @@ class SemanticInsight(BaseModel):
     confidence: float
     created_at: datetime = Field(default_factory=datetime.now)
 
+
 class Session(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
     created_at: datetime = Field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
 
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: Optional[str] = None
+    name: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
+
 
 class CondensedSummary(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -64,6 +73,6 @@ class CondensedSummary(BaseModel):
     period_end: datetime
     source_message_count: int
     source_word_count: int
-    source_summary_ids: List[str] = Field(default_factory=list)
-    consensus_log: Optional[Dict[str, Any]] = None
+    source_summary_ids: list[str] = Field(default_factory=list)
+    consensus_log: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=datetime.now)

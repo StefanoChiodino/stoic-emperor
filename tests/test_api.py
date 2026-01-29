@@ -1,6 +1,7 @@
-import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture
@@ -32,9 +33,9 @@ def test_client(temp_dir):
         "episodic": mock_episodic,
     }
 
-    with patch("src.web.api._state", mock_state), \
-         patch("src.web.api._init"):
+    with patch("src.web.api._state", mock_state), patch("src.web.api._init"):
         from fastapi.testclient import TestClient
+
         from src.web.api import app
 
         yield TestClient(app), mock_db
@@ -56,10 +57,7 @@ class TestProfileEndpoint:
             "version": 3,
             "content": "# Profile\n\nTest content",
             "created_at": "2025-01-15T10:00:00",
-            "consensus_log": {
-                "consensus_reached": True,
-                "stability_score": 0.85
-            }
+            "consensus_log": {"consensus_reached": True, "stability_score": 0.85},
         }
 
         response = client.get("/api/profile")
@@ -109,6 +107,7 @@ class TestChatEndpoint:
         mock_db.get_session_messages.return_value = []
 
         from src.web.api import _state
+
         mock_response = MagicMock()
         mock_response.response_text = "Greetings, seeker of wisdom."
         mock_response.psych_update = PsychUpdate(
@@ -117,7 +116,7 @@ class TestChatEndpoint:
             stoic_principle_applied="presence",
             suggested_next_direction="continue exploration",
             confidence=0.8,
-            semantic_assertions=[]
+            semantic_assertions=[],
         )
         _state["brain"].respond.return_value = mock_response
         _state["brain"].expand_query.return_value = "hello"

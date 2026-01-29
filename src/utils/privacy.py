@@ -5,8 +5,8 @@ This module disables telemetry and analytics across all dependencies.
 For therapy applications, user privacy is paramount.
 """
 
-import os
 import logging
+import os
 
 # ChromaDB telemetry
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
@@ -27,6 +27,7 @@ TELEMETRY_LOGGERS = [
     "huggingface_hub",
     "sentence_transformers",
 ]
+
 
 def disable_telemetry() -> None:
     """Disable all telemetry. Call this at application startup."""

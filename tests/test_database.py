@@ -1,10 +1,7 @@
-import pytest
-from datetime import datetime
-
 from sqlalchemy import inspect
 
 from src.infrastructure.database import Database
-from src.models.schemas import User, Session, Message, SemanticInsight, PsychUpdate
+from src.models.schemas import Message, SemanticInsight, Session, User
 
 
 class TestDatabaseInitialization:
@@ -118,12 +115,7 @@ class TestMessageOperations:
         session = Session(id="session_m", user_id="user_m")
         db.create_session(session)
 
-        msg = Message(
-            session_id="session_m",
-            role="emperor",
-            content="Test response",
-            psych_update=sample_psych_update
-        )
+        msg = Message(session_id="session_m", role="emperor", content="Test response", psych_update=sample_psych_update)
 
         saved = db.save_message(msg)
 
@@ -150,12 +142,9 @@ class TestMessageOperations:
         session = Session(id="session_unproc", user_id="user_unproc")
         db.create_session(session)
 
-        db.save_message(Message(
-            session_id="session_unproc",
-            role="emperor",
-            content="Response",
-            psych_update=sample_psych_update
-        ))
+        db.save_message(
+            Message(session_id="session_unproc", role="emperor", content="Response", psych_update=sample_psych_update)
+        )
 
         unprocessed = db.get_unprocessed_messages("user_unproc")
 
@@ -167,12 +156,7 @@ class TestMessageOperations:
         session = Session(id="session_proc", user_id="user_proc")
         db.create_session(session)
 
-        msg = Message(
-            session_id="session_proc",
-            role="emperor",
-            content="Response",
-            psych_update=sample_psych_update
-        )
+        msg = Message(session_id="session_proc", role="emperor", content="Response", psych_update=sample_psych_update)
         db.save_message(msg)
 
         db.mark_message_processed(msg.id)
@@ -190,7 +174,7 @@ class TestSemanticInsightOperations:
             user_id="user_insight",
             source_message_id="msg_1",
             assertion="User struggles with father relationship",
-            confidence=0.85
+            confidence=0.85,
         )
 
         saved = db.save_semantic_insight(insight)
@@ -201,18 +185,12 @@ class TestSemanticInsightOperations:
         db = Database(test_db_path)
         db.create_user(User(id="user_insights"))
 
-        db.save_semantic_insight(SemanticInsight(
-            user_id="user_insights",
-            source_message_id="msg_1",
-            assertion="Insight 1",
-            confidence=0.8
-        ))
-        db.save_semantic_insight(SemanticInsight(
-            user_id="user_insights",
-            source_message_id="msg_2",
-            assertion="Insight 2",
-            confidence=0.9
-        ))
+        db.save_semantic_insight(
+            SemanticInsight(user_id="user_insights", source_message_id="msg_1", assertion="Insight 1", confidence=0.8)
+        )
+        db.save_semantic_insight(
+            SemanticInsight(user_id="user_insights", source_message_id="msg_2", assertion="Insight 2", confidence=0.9)
+        )
 
         insights = db.get_user_insights("user_insights")
 
@@ -224,7 +202,7 @@ class TestProfileTracking:
         db = Database(test_db_path)
         db.create_user(User(id="user_count"))
 
-        for i in range(3):
+        for _ in range(3):
             db.create_session(Session(user_id="user_count"))
 
         count = db.count_sessions_since_last_analysis("user_count")

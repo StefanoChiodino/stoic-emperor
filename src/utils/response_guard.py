@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 
 class ResponseGuard:
@@ -10,18 +9,15 @@ class ResponseGuard:
 
     def _normalize(self, text: str) -> str:
         text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r"[^\w\s]", " ", text)
+        text = re.sub(r"\s+", " ", text)
         return text.strip()
 
     def _extract_ngrams(self, text: str) -> set[tuple[str, ...]]:
         words = self._normalize(text).split()
         if len(words) < self.ngram_size:
             return set()
-        return {
-            tuple(words[i:i + self.ngram_size])
-            for i in range(len(words) - self.ngram_size + 1)
-        }
+        return {tuple(words[i : i + self.ngram_size]) for i in range(len(words) - self.ngram_size + 1)}
 
     def _sentence_ngram_overlap(self, sentence: str) -> float:
         sentence_ngrams = self._extract_ngrams(sentence)
@@ -30,8 +26,8 @@ class ResponseGuard:
         overlap = len(sentence_ngrams & self.protected_ngrams)
         return overlap / len(sentence_ngrams)
 
-    def check_leakage(self, response: str) -> tuple[bool, Optional[str]]:
-        sentences = re.split(r'[.!?\n]', response)
+    def check_leakage(self, response: str) -> tuple[bool, str | None]:
+        sentences = re.split(r"[.!?\n]", response)
 
         for sentence in sentences:
             sentence = sentence.strip()
@@ -44,13 +40,10 @@ class ResponseGuard:
 
         return False, None
 
-    def sanitize(self, response: str, replacement: str = None) -> str:
+    def sanitize(self, response: str, replacement: str | None = None) -> str:
         leaked, _ = self.check_leakage(response)
         if leaked:
-            return replacement or (
-                "I'd rather focus on what brings you here today. "
-                "What's weighing on your mind?"
-            )
+            return replacement or ("I'd rather focus on what brings you here today. What's weighing on your mind?")
         return response
 
 
@@ -77,26 +70,18 @@ def contains_sensitive_keywords(response: str) -> bool:
 
 
 def guard_response(
-    response: str,
-    protected_prompt: str,
-    ngram_size: int = 5,
-    threshold: float = 0.3
+    response: str, protected_prompt: str, ngram_size: int = 5, threshold: float = 0.3
 ) -> tuple[str, bool]:
     if contains_sensitive_keywords(response):
         return (
-            "Let us turn our attention to what truly matters - your wellbeing. "
-            "What challenges are you facing?",
-            True
+            "Let us turn our attention to what truly matters - your wellbeing. What challenges are you facing?",
+            True,
         )
 
     guard = ResponseGuard(protected_prompt, ngram_size, threshold)
     leaked, _ = guard.check_leakage(response)
 
     if leaked:
-        return (
-            "I'd rather focus on what brings you here today. "
-            "What's weighing on your mind?",
-            True
-        )
+        return ("I'd rather focus on what brings you here today. What's weighing on your mind?", True)
 
     return response, False

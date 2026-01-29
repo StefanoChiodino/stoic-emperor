@@ -1,20 +1,20 @@
 # PRIVACY: Must be first import
 from src.utils.privacy import disable_telemetry
+
 disable_telemetry()
 
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
 
-from src.infrastructure.database import Database
-from src.infrastructure.vector_store import VectorStore
-from src.infrastructure.ingestion_pipeline import IngestionPipeline
-from src.memory.semantic import SemanticMemory
 from src.core.emperor_brain import EmperorBrain
-from src.models.schemas import Session, Message
+from src.infrastructure.database import Database
+from src.infrastructure.ingestion_pipeline import IngestionPipeline
+from src.infrastructure.vector_store import VectorStore
+from src.memory.semantic import SemanticMemory
+from src.models.schemas import Message, Session
 from src.utils.config import load_config
 
 console = Console()
@@ -22,11 +22,7 @@ console = Console()
 DEFAULT_USER_ID = "default_user"
 
 
-def import_journaling(
-    path: str,
-    user_id: str = DEFAULT_USER_ID,
-    trigger_analysis: bool = False
-) -> None:
+def import_journaling(path: str, user_id: str = DEFAULT_USER_ID, trigger_analysis: bool = False) -> None:
     config = load_config()
     db = Database(config["database"]["url"])
     vectors = VectorStore(config["database"]["url"])
@@ -38,11 +34,7 @@ def import_journaling(
         console.print(f"[red]File not found: {path}[/red]")
         return
 
-    console.print(Panel.fit(
-        f"[bold]IMPORTING RESOURCE[/bold]\n"
-        f"[dim]{file_path.name}[/dim]",
-        border_style="blue"
-    ))
+    console.print(Panel.fit(f"[bold]IMPORTING RESOURCE[/bold]\n[dim]{file_path.name}[/dim]", border_style="blue"))
 
     user = db.get_or_create_user(user_id)
 
@@ -62,49 +54,32 @@ def import_journaling(
     if trigger_analysis:
         console.print("\n[dim]Triggering re-analysis...[/dim]")
         from src.cli.analyze import main as run_analysis
+
         run_analysis(user_id=user_id, force=True)
 
 
-def _import_single_file(
-    file_path: Path,
-    user_id: str,
-    db: Database,
-    vectors: VectorStore,
-    brain: EmperorBrain
-) -> None:
+def _import_single_file(file_path: Path, user_id: str, db: Database, vectors: VectorStore, brain: EmperorBrain) -> None:
     console.print(f"  Importing: {file_path.name}")
 
     content = file_path.read_text(encoding="utf-8")
 
     if not content.strip():
-        console.print(f"    [yellow]Empty file, skipping[/yellow]")
+        console.print("    [yellow]Empty file, skipping[/yellow]")
         return
 
-    session = Session(
-        user_id=user_id,
-        metadata={"source": "import", "file": str(file_path)}
-    )
+    session = Session(user_id=user_id, metadata={"source": "import", "file": str(file_path)})
     db.create_session(session)
 
     user_msg = Message(
-        session_id=session.id,
-        role="user",
-        content=f"[Imported journaling entry from {file_path.name}]\n\n{content}"
+        session_id=session.id, role="user", content=f"[Imported journaling entry from {file_path.name}]\n\n{content}"
     )
     db.save_message(user_msg)
 
     with console.status("[dim]Generating analysis...[/dim]"):
-        response = brain.respond(
-            user_message=content,
-            conversation_history=[],
-            retrieved_context=None
-        )
+        response = brain.respond(user_message=content, conversation_history=[], retrieved_context=None)
 
     emperor_msg = Message(
-        session_id=session.id,
-        role="emperor",
-        content=response.response_text,
-        psych_update=response.psych_update
+        session_id=session.id, role="emperor", content=response.response_text, psych_update=response.psych_update
     )
     db.save_message(emperor_msg)
 
@@ -112,34 +87,22 @@ def _import_single_file(
         collection="episodic",
         ids=[str(uuid.uuid4())],
         documents=[content],
-        metadatas=[{
-            "user_id": user_id,
-            "session_id": session.id,
-            "type": "imported_journal",
-            "source_file": str(file_path)
-        }]
+        metadatas=[
+            {"user_id": user_id, "session_id": session.id, "type": "imported_journal", "source_file": str(file_path)}
+        ],
     )
 
-    console.print(f"    [green]✓ Imported and analyzed[/green]")
+    console.print("    [green]✓ Imported and analyzed[/green]")
 
 
-def import_stoic_texts(
-    path: str,
-    author: str,
-    work: str,
-    tag: bool = True
-) -> None:
+def import_stoic_texts(path: str, author: str, work: str, tag: bool = True) -> None:
     config = load_config()
     vectors = VectorStore(config["database"]["url"])
     pipeline = IngestionPipeline(vectors, config=config)
 
     file_path = Path(path)
 
-    console.print(Panel.fit(
-        f"[bold]IMPORTING STOIC TEXT[/bold]\n"
-        f"[dim]{author} - {work}[/dim]",
-        border_style="blue"
-    ))
+    console.print(Panel.fit(f"[bold]IMPORTING STOIC TEXT[/bold]\n[dim]{author} - {work}[/dim]", border_style="blue"))
 
     with console.status("[dim]Processing and tagging...[/dim]"):
         if file_path.is_file():
@@ -152,6 +115,7 @@ def import_stoic_texts(
 
 def main() -> None:
     import argparse
+
     parser = argparse.ArgumentParser(description="Import resources into Stoic Emperor")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

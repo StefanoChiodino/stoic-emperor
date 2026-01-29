@@ -1,19 +1,19 @@
+import json
 import os
 import sqlite3
-import numpy as np
-from typing import List, Dict, Any, Optional
 from contextlib import contextmanager
-from urllib.parse import urlparse
 from pathlib import Path
-import json
+from typing import Any
+from urllib.parse import urlparse
 
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
 
 class VectorStore:
     COLLECTIONS = ["episodic", "semantic", "stoic_wisdom", "psychoanalysis"]
 
-    def __init__(self, database_url: Optional[str] = None):
+    def __init__(self, database_url: str | None = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db")
 
         parsed = urlparse(self.database_url)
@@ -21,15 +21,12 @@ class VectorStore:
 
         if self.is_postgres:
             import psycopg2
-            from psycopg2 import pool as pg_pool
             from pgvector.psycopg2 import register_vector
+            from psycopg2 import pool as pg_pool
+
             self._psycopg2 = psycopg2
             self._register_vector = register_vector
-            self._pool = pg_pool.ThreadedConnectionPool(
-                minconn=2,
-                maxconn=10,
-                dsn=self.database_url
-            )
+            self._pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=10, dsn=self.database_url)
         else:
             db_path = self.database_url.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -138,10 +135,10 @@ class VectorStore:
     def add(
         self,
         collection: str,
-        ids: List[str],
-        documents: List[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        embeddings: Optional[List[List[float]]] = None
+        ids: list[str],
+        documents: list[str],
+        metadatas: list[dict[str, Any]] | None = None,
+        embeddings: list[list[float]] | None = None,
     ) -> None:
         if embeddings is None:
             embeddings = self.embedding_model.encode(documents).tolist()
@@ -158,17 +155,27 @@ class VectorStore:
                            SET document = EXCLUDED.document,
                                embedding = EXCLUDED.embedding,
                                metadata = EXCLUDED.metadata""",
-                        (doc_id, documents[i], embeddings[i], json.dumps(metadata))
+                        (
+                            doc_id,
+                            documents[i] if documents else "",
+                            embeddings[i] if embeddings else [],
+                            json.dumps(metadata),
+                        ),
                     )
                 else:
                     cursor.execute(
                         f"""INSERT OR REPLACE INTO vector_{collection} (id, document, embedding, metadata)
                            VALUES (?, ?, ?, ?)""",
-                        (doc_id, documents[i], json.dumps(embeddings[i]), json.dumps(metadata))
+                        (
+                            doc_id,
+                            documents[i] if documents else "",
+                            json.dumps(embeddings[i] if embeddings else []),
+                            json.dumps(metadata),
+                        ),
                     )
             cursor.close()
 
-    def _cosine_similarity(self, a: List[float], b: List[float]) -> float:
+    def _cosine_similarity(self, a: list[float], b: list[float]) -> float:
         a_np = np.array(a)
         b_np = np.array(b)
         return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np)))
@@ -176,12 +183,12 @@ class VectorStore:
     def query(
         self,
         collection: str,
-        query_texts: Optional[List[str]] = None,
-        query_embeddings: Optional[List[List[float]]] = None,
+        query_texts: list[str] | None = None,
+        query_embeddings: list[list[float]] | None = None,
         n_results: int = 5,
-        where: Optional[Dict[str, Any]] = None,
-        where_document: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        where: dict[str, Any] | None = None,
+        where_document: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if query_embeddings is None and query_texts:
             query_embeddings = self.embedding_model.encode(query_texts).tolist()
 
@@ -193,10 +200,11 @@ class VectorStore:
         with self._connection() as conn:
             if self.is_postgres:
                 from psycopg2.extras import RealDictCursor
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                cursor = conn.cursor(cursor_factory=RealDictCursor)  # type: ignore[call-overload]
                 for query_embedding in query_embeddings:
                     where_clause = ""
-                    params: List[Any] = [query_embedding, n_results]
+                    params: list[Any] = [query_embedding, n_results]
 
                     if where:
                         conditions = []
@@ -212,7 +220,7 @@ class VectorStore:
                            {where_clause}
                            ORDER BY embedding <=> %s::vector
                            LIMIT %s""",
-                        params
+                        params,
                     )
 
                     rows = cursor.fetchall()
@@ -223,7 +231,7 @@ class VectorStore:
             else:
                 cursor = conn.cursor()
                 where_clause = ""
-                params: List[Any] = []
+                params: list[Any] = []
 
                 if where:
                     conditions = []
@@ -233,8 +241,7 @@ class VectorStore:
                     where_clause = "WHERE " + " AND ".join(conditions)
 
                 cursor.execute(
-                    f"SELECT id, document, embedding, metadata FROM vector_{collection} {where_clause}",
-                    params
+                    f"SELECT id, document, embedding, metadata FROM vector_{collection} {where_clause}", params
                 )
                 rows = cursor.fetchall()
 
@@ -263,18 +270,19 @@ class VectorStore:
     def get(
         self,
         collection: str,
-        ids: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None
-    ) -> Dict[str, Any]:
+        ids: list[str] | None = None,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         results = {"ids": [], "documents": [], "metadatas": []}
 
         with self._connection() as conn:
             if self.is_postgres:
                 from psycopg2.extras import RealDictCursor
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                cursor = conn.cursor(cursor_factory=RealDictCursor)  # type: ignore[call-overload]
                 where_clause = ""
-                params: List[Any] = []
+                params: list[Any] = []
 
                 if ids:
                     placeholders = ",".join(["%s"] * len(ids))
@@ -290,8 +298,7 @@ class VectorStore:
                 limit_clause = f"LIMIT {limit}" if limit else ""
 
                 cursor.execute(
-                    f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}",
-                    params
+                    f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}", params
                 )
 
                 rows = cursor.fetchall()
@@ -301,7 +308,7 @@ class VectorStore:
             else:
                 cursor = conn.cursor()
                 where_clause = ""
-                params: List[Any] = []
+                params: list[Any] = []
 
                 if ids:
                     placeholders = ",".join(["?"] * len(ids))
@@ -317,8 +324,7 @@ class VectorStore:
                 limit_clause = f"LIMIT {limit}" if limit else ""
 
                 cursor.execute(
-                    f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}",
-                    params
+                    f"SELECT id, document, metadata FROM vector_{collection} {where_clause} {limit_clause}", params
                 )
 
                 rows = cursor.fetchall()
@@ -330,16 +336,11 @@ class VectorStore:
 
         return results
 
-    def delete(
-        self,
-        collection: str,
-        ids: Optional[List[str]] = None,
-        where: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def delete(self, collection: str, ids: list[str] | None = None, where: dict[str, Any] | None = None) -> None:
         with self._connection() as conn:
             cursor = conn.cursor()
             where_clause = ""
-            params: List[Any] = []
+            params: list[Any] = []
 
             if self.is_postgres:
                 if ids:

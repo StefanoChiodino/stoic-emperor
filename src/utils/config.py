@@ -1,31 +1,35 @@
 import os
-import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import yaml
 from dotenv import load_dotenv
+
 
 def load_env():
     """Load environment variables from .env file"""
     load_dotenv()
 
-def load_config(config_path: str = "config/settings.yaml") -> Dict[str, Any]:
+
+def load_config(config_path: str = "config/settings.yaml") -> dict[str, Any]:
     """Load configuration from YAML file and substitute env vars"""
     load_env()
-    
+
     if not os.path.exists(config_path):
         config = default_config()
     else:
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = yaml.safe_load(f)
         config = substitute_env_vars(config)
-    
+
     prompts_path = Path("config/prompts.yaml")
     if prompts_path.exists():
-        with open(prompts_path, 'r') as f:
+        with open(prompts_path) as f:
             prompts = yaml.safe_load(f)
             config["prompts"] = prompts
-    
+
     return config
+
 
 def substitute_env_vars(config: Any) -> Any:
     """Recursively substitute environment variables in config values"""
@@ -41,7 +45,8 @@ def substitute_env_vars(config: Any) -> Any:
         return os.getenv(inner, config)
     return config
 
-def default_config() -> Dict[str, Any]:
+
+def default_config() -> dict[str, Any]:
     """Return default configuration"""
     return {
         "models": {
@@ -77,5 +82,5 @@ def default_config() -> Dict[str, Any]:
             "chunk_threshold_tokens": 8000,
             "summary_budget_tokens": 12000,
             "use_consensus": True,
-        }
+        },
     }

@@ -1,27 +1,24 @@
 import json
-import yaml
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
-from src.models.schemas import EmperorResponse, PsychUpdate, Message, SemanticAssertion
-from src.utils.llm_client import LLMClient
+import yaml
+
+from src.models.schemas import EmperorResponse, Message, PsychUpdate, SemanticAssertion
 from src.utils.config import load_config
+from src.utils.llm_client import LLMClient
 from src.utils.response_guard import guard_response
 
 
 class EmperorBrain:
-    def __init__(
-        self,
-        llm_client: Optional[LLMClient] = None,
-        config: Optional[Dict[str, Any]] = None
-    ):
+    def __init__(self, llm_client: LLMClient | None = None, config: dict[str, Any] | None = None):
         self.config = config or load_config()
         self.llm = llm_client or LLMClient()
         self.prompts = self._load_prompts()
         self.model = self.config["models"]["main"]
         self._system_prompt = self.prompts.get("marcus_aurelius_system", "")
 
-    def _load_prompts(self) -> Dict[str, str]:
+    def _load_prompts(self) -> dict[str, str]:
         prompts_path = Path("config/prompts.yaml")
         if prompts_path.exists():
             with open(prompts_path) as f:
@@ -31,8 +28,8 @@ class EmperorBrain:
     def respond(
         self,
         user_message: str,
-        conversation_history: Optional[List[Message]] = None,
-        retrieved_context: Optional[Dict[str, Any]] = None
+        conversation_history: list[Message] | None = None,
+        retrieved_context: dict[str, Any] | None = None,
     ) -> EmperorResponse:
         prompt_parts = []
 
@@ -83,14 +80,11 @@ class EmperorBrain:
             model=self.model,
             temperature=0.7,
             max_tokens=2000,
-            json_mode=True
+            json_mode=True,
         )
 
         response = self._parse_response(response_text)
-        guarded_text, was_blocked = guard_response(
-            response.response_text,
-            self._system_prompt
-        )
+        guarded_text, was_blocked = guard_response(response.response_text, self._system_prompt)
         if was_blocked:
             response.response_text = guarded_text
             response.psych_update.detected_patterns.append("prompt_extraction_attempt")
@@ -104,10 +98,7 @@ class EmperorBrain:
             psych_data = data.get("psych_update", {})
             raw_assertions = psych_data.get("semantic_assertions", [])
             semantic_assertions = [
-                SemanticAssertion(
-                    text=a.get("text", ""),
-                    confidence=a.get("confidence", 0.5)
-                )
+                SemanticAssertion(text=a.get("text", ""), confidence=a.get("confidence", 0.5))
                 for a in raw_assertions
                 if a.get("text")
             ]
@@ -118,14 +109,13 @@ class EmperorBrain:
                 stoic_principle_applied=psych_data.get("stoic_principle_applied", ""),
                 suggested_next_direction=psych_data.get("suggested_next_direction", ""),
                 confidence=psych_data.get("confidence", 0.5),
-                semantic_assertions=semantic_assertions
+                semantic_assertions=semantic_assertions,
             )
 
             return EmperorResponse(
-                response_text=data.get("response_text", "I must reflect further on this."),
-                psych_update=psych_update
+                response_text=data.get("response_text", "I must reflect further on this."), psych_update=psych_update
             )
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError):
             return EmperorResponse(
                 response_text=response_text if isinstance(response_text, str) else "I must reflect further on this.",
                 psych_update=PsychUpdate(
@@ -133,8 +123,8 @@ class EmperorBrain:
                     emotional_state="unknown",
                     stoic_principle_applied="",
                     suggested_next_direction="Retry with clearer structure",
-                    confidence=0.0
-                )
+                    confidence=0.0,
+                ),
             )
 
     def expand_query(self, user_message: str) -> str:
@@ -149,22 +139,15 @@ class EmperorBrain:
             system_prompt="You are a search query expansion assistant.",
             model=self.config["models"].get("light", self.config["models"]["main"]),
             temperature=0.3,
-            max_tokens=200
+            max_tokens=200,
         )
 
-    def extract_semantic_insights(
-        self,
-        user_message: str,
-        psych_update: PsychUpdate
-    ) -> List[Dict[str, Any]]:
+    def extract_semantic_insights(self, user_message: str, psych_update: PsychUpdate) -> list[dict[str, Any]]:
         prompt_template = self.prompts.get("semantic_extraction", "")
         if not prompt_template:
             return []
 
-        prompt = prompt_template.format(
-            user_message=user_message,
-            psych_update=psych_update.model_dump_json()
-        )
+        prompt = prompt_template.format(user_message=user_message, psych_update=psych_update.model_dump_json())
 
         response = self.llm.generate(
             prompt=prompt,
@@ -172,7 +155,7 @@ class EmperorBrain:
             model=self.config["models"]["main"],
             temperature=0.3,
             max_tokens=500,
-            json_mode=True
+            json_mode=True,
         )
 
         try:

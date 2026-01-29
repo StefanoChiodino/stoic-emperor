@@ -1,0 +1,21 @@
+repos:
+  - repo: git@github.com:pre-commit/pre-commit-hooks.git
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  - repo: git@github.com:astral-sh/ruff-pre-commit.git
+    rev: v0.9.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: git@github.com:RobertCraigie/pyright-python.git
+    rev: v1.1.392
+    hooks:
+      - id: pyright

@@ -1,9 +1,9 @@
-import pytest
-import tempfile
-import shutil
 import os
+import shutil
+import tempfile
 from pathlib import Path
-from datetime import datetime
+
+import pytest
 
 
 @pytest.fixture
@@ -34,12 +34,13 @@ Why can't he just accept that I'm not him?"""
 @pytest.fixture
 def sample_psych_update():
     from src.models.schemas import PsychUpdate
+
     return PsychUpdate(
         detected_patterns=["conflict_avoidance", "external_validation_seeking"],
         emotional_state="frustrated, seeking approval",
         stoic_principle_applied="Dichotomy of Control",
         suggested_next_direction="Explore father relationship dynamics",
-        confidence=0.85
+        confidence=0.85,
     )
 
 
@@ -80,6 +81,6 @@ def mock_emperor_response():
             "emotional_state": "conflicted, frustrated",
             "stoic_principle_applied": "Dichotomy of Control",
             "suggested_next_direction": "Explore internalized parental expectations",
-            "confidence": 0.8
-        }
+            "confidence": 0.8,
+        },
     }

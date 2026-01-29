@@ -1,12 +1,25 @@
 import os
-from datetime import datetime
-from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import create_engine, String, Integer, Float, DateTime, Text, ForeignKey, JSON, Index, select, func, desc
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session as SASession
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    desc,
+    func,
+    select,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from src.models.schemas import User, Session, Message, SemanticInsight, PsychUpdate, CondensedSummary
+from src.models.schemas import CondensedSummary, Message, PsychUpdate, SemanticInsight, Session, User
 
 
 class Base(DeclarativeBase):
@@ -17,7 +30,7 @@ class UserModel(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
@@ -27,7 +40,7 @@ class SessionModel(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, default=dict)
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSON, default=dict)
 
     __table_args__ = (Index("idx_sessions_user", "user_id"),)
 
@@ -39,9 +52,9 @@ class MessageModel(Base):
     session_id: Mapped[str] = mapped_column(String, ForeignKey("sessions.id"))
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
-    psych_update: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    psych_update: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    semantic_processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    semantic_processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     __table_args__ = (
         Index("idx_messages_session", "session_id"),
@@ -56,7 +69,7 @@ class ProfileModel(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"))
     version: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text)
-    consensus_log: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    consensus_log: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
@@ -84,8 +97,8 @@ class CondensedSummaryModel(Base):
     period_end: Mapped[datetime] = mapped_column(DateTime)
     source_message_count: Mapped[int] = mapped_column(Integer)
     source_word_count: Mapped[int] = mapped_column(Integer)
-    source_summary_ids: Mapped[Optional[list]] = mapped_column(JSON, default=list)
-    consensus_log: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    source_summary_ids: Mapped[list | None] = mapped_column(JSON, default=list)
+    consensus_log: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     __table_args__ = (
@@ -102,7 +115,7 @@ class SchemaVersionModel(Base):
 
 
 class Database:
-    def __init__(self, database_url: Optional[str] = None):
+    def __init__(self, database_url: str | None = None):
         self.database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./data/stoic_emperor.db")
 
         if not self.database_url.startswith(("sqlite", "postgresql", "postgres")):
@@ -110,6 +123,7 @@ class Database:
 
         if self.database_url.startswith("sqlite"):
             from pathlib import Path
+
             db_path = self.database_url.replace("sqlite:///", "")
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -126,7 +140,9 @@ class Database:
         self._ensure_schema_version()
 
     def _run_column_migrations(self) -> None:
-        from sqlalchemy import text, inspect as sa_inspect
+        from sqlalchemy import inspect as sa_inspect
+        from sqlalchemy import text
+
         inspector = sa_inspect(self.engine)
         columns = {col["name"] for col in inspector.get_columns("users")}
         if "name" not in columns:
@@ -158,7 +174,7 @@ class Database:
             session.add(model)
         return user
 
-    def get_user(self, user_id: str) -> Optional[User]:
+    def get_user(self, user_id: str) -> User | None:
         with self._session() as session:
             model = session.get(UserModel, user_id)
             if model:
@@ -172,7 +188,7 @@ class Database:
             self.create_user(user)
         return user
 
-    def update_user_name(self, user_id: str, name: str) -> Optional[User]:
+    def update_user_name(self, user_id: str, name: str) -> User | None:
         with self._session() as session:
             model = session.get(UserModel, user_id)
             if model:
@@ -191,7 +207,7 @@ class Database:
             session.add(model)
         return session_obj
 
-    def get_session(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str) -> Session | None:
         with self._session() as session:
             model = session.get(SessionModel, session_id)
             if model:
@@ -203,7 +219,7 @@ class Database:
                 )
         return None
 
-    def get_latest_session(self, user_id: str) -> Optional[Session]:
+    def get_latest_session(self, user_id: str) -> Session | None:
         with self._session() as session:
             stmt = (
                 select(SessionModel)
@@ -221,7 +237,7 @@ class Database:
                 )
         return None
 
-    def get_user_sessions_with_counts(self, user_id: str) -> List[Dict[str, Any]]:
+    def get_user_sessions_with_counts(self, user_id: str) -> list[dict[str, Any]]:
         with self._session() as session:
             stmt = (
                 select(
@@ -235,10 +251,7 @@ class Database:
                 .order_by(desc(SessionModel.created_at))
             )
             rows = session.execute(stmt).all()
-            return [
-                {"id": row.id, "created_at": row.created_at, "message_count": row.message_count}
-                for row in rows
-            ]
+            return [{"id": row.id, "created_at": row.created_at, "message_count": row.message_count} for row in rows]
 
     def save_message(self, message: Message) -> Message:
         with self._session() as session:
@@ -255,17 +268,13 @@ class Database:
             session.add(model)
         return message
 
-    def get_session_messages(self, session_id: str) -> List[Message]:
+    def get_session_messages(self, session_id: str) -> list[Message]:
         with self._session() as session:
-            stmt = (
-                select(MessageModel)
-                .where(MessageModel.session_id == session_id)
-                .order_by(MessageModel.created_at)
-            )
+            stmt = select(MessageModel).where(MessageModel.session_id == session_id).order_by(MessageModel.created_at)
             models = session.scalars(stmt).all()
             return [self._model_to_message(m) for m in models]
 
-    def get_unprocessed_messages(self, user_id: str) -> List[Message]:
+    def get_unprocessed_messages(self, user_id: str) -> list[Message]:
         with self._session() as session:
             stmt = (
                 select(MessageModel)
@@ -297,7 +306,7 @@ class Database:
             session.add(model)
         return insight
 
-    def get_user_insights(self, user_id: str) -> List[SemanticInsight]:
+    def get_user_insights(self, user_id: str) -> list[SemanticInsight]:
         with self._session() as session:
             stmt = (
                 select(SemanticInsightModel)
@@ -319,10 +328,7 @@ class Database:
 
     def count_sessions_since_last_analysis(self, user_id: str) -> int:
         with self._session() as session:
-            last_profile_stmt = (
-                select(func.max(ProfileModel.created_at))
-                .where(ProfileModel.user_id == user_id)
-            )
+            last_profile_stmt = select(func.max(ProfileModel.created_at)).where(ProfileModel.user_id == user_id)
             last_profile_time = session.scalar(last_profile_stmt)
 
             if last_profile_time:
@@ -333,14 +339,10 @@ class Database:
                     .where(SessionModel.created_at > last_profile_time)
                 )
             else:
-                count_stmt = (
-                    select(func.count())
-                    .select_from(SessionModel)
-                    .where(SessionModel.user_id == user_id)
-                )
+                count_stmt = select(func.count()).select_from(SessionModel).where(SessionModel.user_id == user_id)
             return session.scalar(count_stmt) or 0
 
-    def get_latest_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+    def get_latest_profile(self, user_id: str) -> dict[str, Any] | None:
         with self._session() as session:
             stmt = (
                 select(ProfileModel)
@@ -358,12 +360,11 @@ class Database:
                 }
         return None
 
-    def save_profile(self, user_id: str, content: str, consensus_log: Optional[Dict[str, Any]] = None) -> int:
+    def save_profile(self, user_id: str, content: str, consensus_log: dict[str, Any] | None = None) -> int:
         import uuid
+
         with self._session() as session:
-            max_version = session.scalar(
-                select(func.max(ProfileModel.version)).where(ProfileModel.user_id == user_id)
-            )
+            max_version = session.scalar(select(func.max(ProfileModel.version)).where(ProfileModel.user_id == user_id))
             version = (max_version or 0) + 1
             model = ProfileModel(
                 id=str(uuid.uuid4()),
@@ -394,7 +395,7 @@ class Database:
             session.add(model)
         return summary
 
-    def get_condensed_summaries(self, user_id: str, level: Optional[int] = None) -> List[CondensedSummary]:
+    def get_condensed_summaries(self, user_id: str, level: int | None = None) -> list[CondensedSummary]:
         with self._session() as session:
             stmt = select(CondensedSummaryModel).where(CondensedSummaryModel.user_id == user_id)
             if level is not None:
@@ -407,9 +408,9 @@ class Database:
     def get_messages_in_range(
         self,
         user_id: str,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[Message]:
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[Message]:
         with self._session() as session:
             stmt = (
                 select(MessageModel)
@@ -424,7 +425,7 @@ class Database:
             models = session.scalars(stmt).all()
             return [self._model_to_message(m) for m in models]
 
-    def get_recent_messages(self, user_id: str, limit: int = 20) -> List[Message]:
+    def get_recent_messages(self, user_id: str, limit: int = 20) -> list[Message]:
         with self._session() as session:
             stmt = (
                 select(MessageModel)

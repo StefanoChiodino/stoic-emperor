@@ -1,28 +1,27 @@
 # PRIVACY: Must be first import
 from src.utils.privacy import disable_telemetry
+
 disable_telemetry()
 
-import sys
-from typing import Optional
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.prompt import Prompt
 
 from src.core.emperor_brain import EmperorBrain
 from src.infrastructure.database import Database
 from src.infrastructure.vector_store import VectorStore
-from src.models.schemas import User, Session, Message
-from src.utils.config import load_config
 from src.memory.condensation import CondensationManager
+from src.models.schemas import Message, Session
+from src.utils.config import load_config
 
 console = Console()
 
 DEFAULT_USER_ID = "default_user"
 
 
-def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> None:
+def main(user_id: str = DEFAULT_USER_ID, session_id: str | None = None) -> None:
     config = load_config()
     db = Database(config["database"]["url"])
     vectors = VectorStore(config["database"]["url"])
@@ -45,12 +44,14 @@ def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> No
 
     history = db.get_session_messages(session.id)
 
-    console.print(Panel.fit(
-        "[bold]MARCUS AURELIUS[/bold]\n"
-        "[dim]Stoic Emperor • AI Persona[/dim]\n\n"
-        "Type your thoughts. Press Ctrl+D or type 'exit' to end.",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]MARCUS AURELIUS[/bold]\n"
+            "[dim]Stoic Emperor • AI Persona[/dim]\n\n"
+            "Type your thoughts. Press Ctrl+D or type 'exit' to end.",
+            border_style="blue",
+        )
+    )
 
     if history:
         console.print(f"\n[dim]Resuming session with {len(history)} previous messages.[/dim]\n")
@@ -72,27 +73,24 @@ def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> No
 
         with console.status("[dim]The Emperor contemplates...[/dim]", spinner="dots"):
             response = brain.respond(
-                user_message=user_input,
-                conversation_history=history,
-                retrieved_context=retrieved_context
+                user_message=user_input, conversation_history=history, retrieved_context=retrieved_context
             )
 
         emperor_msg = Message(
-            session_id=session.id,
-            role="emperor",
-            content=response.response_text,
-            psych_update=response.psych_update
+            session_id=session.id, role="emperor", content=response.response_text, psych_update=response.psych_update
         )
         db.save_message(emperor_msg)
         history.append(emperor_msg)
 
         console.print()
-        console.print(Panel(
-            Markdown(response.response_text),
-            title="[bold blue]Marcus Aurelius[/bold blue]",
-            border_style="blue",
-            padding=(1, 2)
-        ))
+        console.print(
+            Panel(
+                Markdown(response.response_text),
+                title="[bold blue]Marcus Aurelius[/bold blue]",
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
         console.print()
 
         if condensation.should_condense(user.id):
@@ -102,12 +100,7 @@ def main(user_id: str = DEFAULT_USER_ID, session_id: Optional[str] = None) -> No
     console.print("\n[dim]The Emperor withdraws. May you find virtue in your path.[/dim]\n")
 
 
-def _retrieve_context(
-    vectors: VectorStore,
-    brain: EmperorBrain,
-    user_message: str,
-    user_id: str
-) -> dict:
+def _retrieve_context(vectors: VectorStore, brain: EmperorBrain, user_message: str, user_id: str) -> dict:
     context = {"stoic": [], "psych": [], "insights": [], "episodic": []}
 
     try:
@@ -132,12 +125,7 @@ def _retrieve_context(
         pass
 
     try:
-        insight_results = vectors.query(
-            "semantic",
-            query_texts=[query_text],
-            n_results=5,
-            where={"user_id": user_id}
-        )
+        insight_results = vectors.query("semantic", query_texts=[query_text], n_results=5, where={"user_id": user_id})
         if insight_results.get("documents") and insight_results["documents"][0]:
             context["insights"] = insight_results["documents"][0]
     except Exception:
@@ -148,6 +136,7 @@ def _retrieve_context(
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Chat with Marcus Aurelius")
     parser.add_argument("--user", default=DEFAULT_USER_ID, help="User ID")
     parser.add_argument("--session", default=None, help="Resume specific session ID")

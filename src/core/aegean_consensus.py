@@ -1,11 +1,11 @@
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-from pathlib import Path
 import json
 import os
-import yaml
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
+import yaml
 from openai import OpenAI
 
 
@@ -14,8 +14,8 @@ class ConsensusRound:
     round_number: int
     model_a_output: str
     model_b_output: str
-    model_a_review: Optional[Dict] = None
-    model_b_review: Optional[Dict] = None
+    model_a_review: dict | None = None
+    model_b_review: dict | None = None
     consensus_reached: bool = False
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -24,14 +24,14 @@ class ConsensusRound:
 class ConsensusResult:
     final_output: str
     consensus_reached: bool
-    rounds: List[ConsensusRound]
+    rounds: list[ConsensusRound]
     model_a_name: str
     model_b_name: str
     stability_score: float
-    critical_flags: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    critical_flags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "consensus_reached": self.consensus_reached,
             "rounds": len(self.rounds),
@@ -39,7 +39,7 @@ class ConsensusResult:
             "model_b": self.model_b_name,
             "stability_score": self.stability_score,
             "critical_flags": self.critical_flags,
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
 
@@ -48,11 +48,11 @@ class AegeanConsensusProtocol:
         self,
         model_a: str,
         model_b: str,
-        prompts: Optional[Dict[str, str]] = None,
+        prompts: dict[str, str] | None = None,
         beta_threshold: int = 2,
         alpha_quorum: float = 1.0,
         verbose: bool = True,
-        output_folder: str = "./data/output/consensus_logs"
+        output_folder: str = "./data/output/consensus_logs",
     ):
         self.model_a = model_a
         self.model_b = model_b
@@ -68,7 +68,7 @@ class AegeanConsensusProtocol:
         self.client_a = OpenAI(api_key=api_key, base_url=base_url)
         self.client_b = OpenAI(api_key=api_key, base_url=base_url)
 
-    def _load_prompts(self) -> Dict[str, str]:
+    def _load_prompts(self) -> dict[str, str]:
         prompts_path = Path("config/prompts.yaml")
         if prompts_path.exists():
             with open(prompts_path) as f:
@@ -78,12 +78,12 @@ class AegeanConsensusProtocol:
     def reach_consensus(
         self,
         prompt_name: str,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
         context: str = "",
-        max_rounds: Optional[int] = None,
+        max_rounds: int | None = None,
         temperature: float = 0.7,
-        critical_constructs: Optional[List[str]] = None,
-        use_model_a_on_failure: bool = True
+        critical_constructs: list[str] | None = None,
+        use_model_a_on_failure: bool = True,
     ) -> ConsensusResult:
         if max_rounds is None:
             max_rounds = self.beta_threshold
@@ -92,7 +92,7 @@ class AegeanConsensusProtocol:
             print(f"\n🔄 Aegean Consensus: {prompt_name}")
             print(f"   Models: {self.model_a} ⇄ {self.model_b}")
 
-        rounds: List[ConsensusRound] = []
+        rounds: list[ConsensusRound] = []
         consensus_reached = False
         final_output = ""
         consecutive_approvals = 0
@@ -118,7 +118,7 @@ class AegeanConsensusProtocol:
                 model_a_output=output_a,
                 model_b_output=output_b,
                 model_a_review=review_a_of_b,
-                model_b_review=review_b_of_a
+                model_b_review=review_b_of_a,
             )
 
             a_approves = review_b_of_a.get("approved", False)
@@ -146,7 +146,9 @@ class AegeanConsensusProtocol:
             rounds.append(current_round)
 
             if round_num < max_rounds and not consensus_reached:
-                variables = self._update_variables_with_feedback(variables, output_a, output_b, review_a_of_b, review_b_of_a)
+                variables = self._update_variables_with_feedback(
+                    variables, output_a, output_b, review_a_of_b, review_b_of_a
+                )
 
         if not consensus_reached:
             if use_model_a_on_failure:
@@ -167,19 +169,14 @@ class AegeanConsensusProtocol:
             model_b_name=self.model_b,
             stability_score=stability_score,
             critical_flags=critical_flags,
-            metadata={"rounds_needed": len(rounds), "max_rounds": max_rounds}
+            metadata={"rounds_needed": len(rounds), "max_rounds": max_rounds},
         )
 
         self._log_consensus(result, prompt_name)
         return result
 
     def _generate(
-        self,
-        client: OpenAI,
-        model: str,
-        prompt_name: str,
-        variables: Dict[str, Any],
-        temperature: float
+        self, client: OpenAI, model: str, prompt_name: str, variables: dict[str, Any], temperature: float
     ) -> str:
         if prompt_name not in self.prompts:
             raise ValueError(f"Prompt '{prompt_name}' not found")
@@ -188,12 +185,9 @@ class AegeanConsensusProtocol:
         prompt = prompt_template.format(**variables)
 
         response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_tokens=4000
+            model=model, messages=[{"role": "user", "content": prompt}], temperature=temperature, max_tokens=4000
         )
-        return response.choices[0].message.content.strip()
+        return (response.choices[0].message.content or "").strip()
 
     def _review_output(
         self,
@@ -201,9 +195,9 @@ class AegeanConsensusProtocol:
         model: str,
         output_to_review: str,
         context: str,
-        critical_constructs: Optional[List[str]],
-        original_data: str = ""
-    ) -> Dict:
+        critical_constructs: list[str] | None,
+        original_data: str = "",
+    ) -> dict:
         review_prompt = f"""Review the following analysis for accuracy and completeness.
 
 Analysis to review:
@@ -212,7 +206,7 @@ Analysis to review:
 Original source data:
 {original_data[:2000] if original_data else "Not provided"}
 
-Critical areas to check: {', '.join(critical_constructs) if critical_constructs else 'general quality'}
+Critical areas to check: {", ".join(critical_constructs) if critical_constructs else "general quality"}
 
 Respond with JSON:
 {{
@@ -223,42 +217,34 @@ Respond with JSON:
 }}"""
 
         response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": review_prompt}],
-            temperature=0.3,
-            max_tokens=1000
+            model=model, messages=[{"role": "user", "content": review_prompt}], temperature=0.3, max_tokens=1000
         )
 
-        review_text = response.choices[0].message.content.strip()
+        review_text = (response.choices[0].message.content or "").strip()
 
         try:
-            start = review_text.find('{')
-            end = review_text.rfind('}')
+            start = review_text.find("{")
+            end = review_text.rfind("}")
             if start != -1 and end != -1:
-                return json.loads(review_text[start:end + 1])
+                return json.loads(review_text[start : end + 1])
         except json.JSONDecodeError:
             pass
 
         return {"approved": False, "reasoning": review_text, "concerns": []}
 
-    def _merge_outputs(self, output_a: str, output_b: str, review_a: Dict, review_b: Dict) -> str:
+    def _merge_outputs(self, output_a: str, output_b: str, review_a: dict, review_b: dict) -> str:
         strengths_a = len(review_b.get("strengths", []))
         strengths_b = len(review_a.get("strengths", []))
         return output_a if strengths_a >= strengths_b else output_b
 
     def _update_variables_with_feedback(
-        self,
-        variables: Dict[str, Any],
-        output_a: str,
-        output_b: str,
-        review_a: Dict,
-        review_b: Dict
-    ) -> Dict[str, Any]:
+        self, variables: dict[str, Any], output_a: str, output_b: str, review_a: dict, review_b: dict
+    ) -> dict[str, Any]:
         updated = variables.copy()
         updated["previous_feedback"] = f"Feedback: {review_a.get('reasoning', '')} | {review_b.get('reasoning', '')}"
         return updated
 
-    def _create_no_consensus_output(self, rounds: List[ConsensusRound]) -> str:
+    def _create_no_consensus_output(self, rounds: list[ConsensusRound]) -> str:
         last = rounds[-1]
         return f"""# Analysis - Manual Review Required
 
@@ -269,25 +255,25 @@ Respond with JSON:
 {last.model_b_output}
 """
 
-    def _check_critical_disagreements(self, rounds: List[ConsensusRound], critical_constructs: List[str]) -> List[str]:
+    def _check_critical_disagreements(self, rounds: list[ConsensusRound], critical_constructs: list[str]) -> list[str]:
         if not rounds or not critical_constructs:
             return []
-        
+
         flags = []
         last = rounds[-1]
-        
+
         for construct in critical_constructs:
             concerns_a = last.model_a_review.get("concerns", []) if last.model_a_review else []
             concerns_b = last.model_b_review.get("concerns", []) if last.model_b_review else []
-            
+
             for concern in concerns_a + concerns_b:
                 if isinstance(concern, dict) and construct.lower() in concern.get("issue", "").lower():
                     flags.append(f"Critical disagreement: {construct}")
                     break
-        
+
         return flags
 
-    def _calculate_stability_score(self, rounds: List[ConsensusRound]) -> float:
+    def _calculate_stability_score(self, rounds: list[ConsensusRound]) -> float:
         if not rounds:
             return 0.0
         return sum(1 for r in rounds if r.consensus_reached) / len(rounds)
@@ -299,7 +285,7 @@ Respond with JSON:
 
         log_data = {"log_id": log_id, "timestamp": timestamp.isoformat(), **result.to_dict()}
 
-        with open(log_file, 'w') as f:
+        with open(log_file, "w") as f:
             json.dump(log_data, f, indent=2)
 
         return log_file
