@@ -4,6 +4,9 @@ print("Python started", flush=True)
 from src.utils.privacy import disable_telemetry
 disable_telemetry()
 
+from src.utils.config import load_env
+load_env()
+
 import os
 from pathlib import Path
 from typing import Optional
