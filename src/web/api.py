@@ -8,6 +8,7 @@ from src.utils.config import load_env
 
 load_env()
 
+import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
@@ -219,8 +220,11 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     if summaries:
         retrieved_context["narrative"] = "\n\n".join(s.content for s in summaries)
 
-    response = brain.respond(
-        user_message=request.message, conversation_history=history, retrieved_context=retrieved_context
+    response = await asyncio.to_thread(
+        brain.respond,
+        user_message=request.message,
+        conversation_history=history,
+        retrieved_context=retrieved_context,
     )
 
     emperor_msg = Message(

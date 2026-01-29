@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Any
 
@@ -6,11 +7,17 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+logger = logging.getLogger(__name__)
+
 
 class LLMClient:
-    def __init__(self, api_key: str | None = None, base_url: str | None = None):
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, timeout: float = 120.0):
         self.base_url = base_url or os.getenv("LLM_BASE_URL")
-        self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"), base_url=self.base_url)
+        self.client = OpenAI(
+            api_key=api_key or os.getenv("OPENAI_API_KEY"),
+            base_url=self.base_url,
+            timeout=timeout,
+        )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     def generate(
@@ -27,15 +34,29 @@ class LLMClient:
             {"role": "user", "content": prompt},
         ]
 
-        response = self.client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"} if json_mode else None,  # type: ignore[arg-type]
-        )
+        is_claude = "sonnet" in model.lower() or "claude" in model.lower() or "opus" in model.lower()
+        use_json_format = json_mode and not is_claude
 
-        return (response.choices[0].message.content or "").strip()
+        logger.debug(f"LLM request: model={model}, json_mode={json_mode}, use_json_format={use_json_format}")
+
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if use_json_format:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        response = self.client.chat.completions.create(**kwargs)
+
+        content = (response.choices[0].message.content or "").strip()
+        logger.debug(f"LLM response length: {len(content)}, first 200 chars: {content[:200]}")
+
+        if not content:
+            logger.error(f"Empty response from LLM. Full response object: {response}")
+
+        return content
 
     def generate_structured(
         self,

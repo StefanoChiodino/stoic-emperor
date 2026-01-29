@@ -39,7 +39,7 @@ branch = true
 omit = ["src/cli/*", "tests/*"]
 
 [tool.coverage.report]
-fail_under = 70
+fail_under = 95
 show_missing = true
 exclude_lines = [
     "pragma: no cover",

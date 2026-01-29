@@ -1,4 +1,5 @@
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,8 @@ from src.models.schemas import EmperorResponse, Message, PsychUpdate, SemanticAs
 from src.utils.config import load_config
 from src.utils.llm_client import LLMClient
 from src.utils.response_guard import guard_response
+
+logger = logging.getLogger(__name__)
 
 
 class EmperorBrain:
@@ -74,26 +77,54 @@ class EmperorBrain:
         full_prompt = "\n".join(prompt_parts)
         system_prompt = self._system_prompt.format(profile=profile_text, narrative=narrative_text)
 
-        response_text = self.llm.generate(
-            prompt=full_prompt,
-            system_prompt=system_prompt,
-            model=self.model,
-            temperature=0.7,
-            max_tokens=2000,
-            json_mode=True,
+        max_attempts = 2
+        last_error = None
+
+        for attempt in range(max_attempts):
+            try:
+                response_text = self.llm.generate(
+                    prompt=full_prompt,
+                    system_prompt=system_prompt,
+                    model=self.model,
+                    temperature=0.7 + (attempt * 0.1),
+                    max_tokens=2000,
+                    json_mode=True,
+                )
+
+                response = self._parse_response(response_text)
+                guarded_text, was_blocked = guard_response(response.response_text, self._system_prompt)
+                if was_blocked:
+                    response.response_text = guarded_text
+                    response.psych_update.detected_patterns.append("prompt_extraction_attempt")
+
+                return response
+
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                last_error = e
+                logger.warning(f"Response parse attempt {attempt + 1} failed: {e}")
+                continue
+
+        logger.error(f"All {max_attempts} attempts failed. Last error: {last_error}")
+        return EmperorResponse(
+            response_text="Something disrupted my thoughts. Speak again, and I shall attend more carefully.",
+            psych_update=self._empty_psych_update(["response_generation_failed"]),
         )
 
-        response = self._parse_response(response_text)
-        guarded_text, was_blocked = guard_response(response.response_text, self._system_prompt)
-        if was_blocked:
-            response.response_text = guarded_text
-            response.psych_update.detected_patterns.append("prompt_extraction_attempt")
-
-        return response
+    def _strip_markdown_fences(self, text: str) -> str:
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            text = "\n".join(lines)
+        return text.strip()
 
     def _parse_response(self, response_text: str) -> EmperorResponse:
         try:
-            data = json.loads(response_text)
+            cleaned = self._strip_markdown_fences(response_text)
+            data = json.loads(cleaned)
 
             psych_data = data.get("psych_update", {})
             raw_assertions = psych_data.get("semantic_assertions", [])
@@ -112,20 +143,31 @@ class EmperorBrain:
                 semantic_assertions=semantic_assertions,
             )
 
-            return EmperorResponse(
-                response_text=data.get("response_text", "I must reflect further on this."), psych_update=psych_update
-            )
-        except (json.JSONDecodeError, KeyError):
-            return EmperorResponse(
-                response_text=response_text if isinstance(response_text, str) else "I must reflect further on this.",
-                psych_update=PsychUpdate(
-                    detected_patterns=["parse_error"],
-                    emotional_state="unknown",
-                    stoic_principle_applied="",
-                    suggested_next_direction="Retry with clearer structure",
-                    confidence=0.0,
-                ),
-            )
+            user_response = data.get("response_text") or data.get("text") or data.get("reply")
+            if not user_response:
+                logger.error(
+                    f"LLM returned JSON without response_text. Keys: {list(data.keys())}. Full: {cleaned[:500]}"
+                )
+                raise ValueError("Missing response_text in LLM output")
+
+            return EmperorResponse(response_text=user_response, psych_update=psych_update)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}. Raw response: {response_text[:500]}")
+            raise
+
+        except (KeyError, ValueError) as e:
+            logger.error(f"Parse error: {e}. Raw response: {response_text[:500]}")
+            raise
+
+    def _empty_psych_update(self, patterns: list[str] | None = None) -> PsychUpdate:
+        return PsychUpdate(
+            detected_patterns=patterns or [],
+            emotional_state="unknown",
+            stoic_principle_applied="",
+            suggested_next_direction="",
+            confidence=0.0,
+        )
 
     def expand_query(self, user_message: str) -> str:
         prompt_template = self.prompts.get("query_expansion", "")
