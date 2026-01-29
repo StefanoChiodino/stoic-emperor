@@ -216,6 +216,10 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     if profile:
         retrieved_context["profile"] = profile["content"]
 
+    summaries = _state["condensation"].get_context_summaries(user.id, token_budget=2000)
+    if summaries:
+        retrieved_context["narrative"] = "\n\n".join(s.content for s in summaries)
+
     response = brain.respond(
         user_message=request.message,
         conversation_history=history,
@@ -432,6 +436,18 @@ def _retrieve_context(user_message: str, user_id: str) -> dict:
         )
         if insight_results.get("documents") and insight_results["documents"][0]:
             context["insights"] = insight_results["documents"][0]
+    except Exception:
+        pass
+
+    try:
+        episodic_results = vectors.query(
+            "episodic",
+            query_texts=[query_text],
+            n_results=3,
+            where={"user_id": user_id}
+        )
+        if episodic_results.get("documents") and episodic_results["documents"][0]:
+            context["episodic"] = episodic_results["documents"][0]
     except Exception:
         pass
 

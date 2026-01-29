@@ -37,12 +37,21 @@ class EmperorBrain:
         prompt_parts = []
 
         profile_text = "No profile yet - this is a new user."
+        narrative_text = "No conversation history yet."
         if retrieved_context:
             if retrieved_context.get("profile"):
                 profile_text = retrieved_context["profile"]
 
+            if retrieved_context.get("narrative"):
+                narrative_text = retrieved_context["narrative"]
+
+            if retrieved_context.get("episodic"):
+                prompt_parts.append("## Relevant Past Conversations")
+                for item in retrieved_context["episodic"][:3]:
+                    prompt_parts.append(f"- {item}")
+
             if retrieved_context.get("stoic"):
-                prompt_parts.append("## Relevant Stoic Wisdom")
+                prompt_parts.append("\n## Relevant Stoic Wisdom")
                 for item in retrieved_context["stoic"][:3]:
                     prompt_parts.append(f"- {item}")
 
@@ -66,7 +75,7 @@ class EmperorBrain:
         prompt_parts.append("\nRespond with the JSON object as specified.")
 
         full_prompt = "\n".join(prompt_parts)
-        system_prompt = self._system_prompt.format(profile=profile_text)
+        system_prompt = self._system_prompt.format(profile=profile_text, narrative=narrative_text)
 
         response_text = self.llm.generate(
             prompt=full_prompt,
