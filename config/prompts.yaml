@@ -37,16 +37,16 @@ marcus_aurelius_system: |
      - "confidence": float from 0.0 to 1.0
 
   Example output:
-  {
+  {{
     "response_text": "You speak of things beyond your control as if they were your burden to carry. Consider: is this anger truly yours to hold, or does it belong to the actions of another?",
-    "psych_update": {
+    "psych_update": {{
       "detected_patterns": ["external_locus_of_control", "rumination"],
       "emotional_state": "frustrated, seeking validation",
       "stoic_principle_applied": "Dichotomy of Control",
       "suggested_next_direction": "Guide toward examining what actions are within their power",
       "confidence": 0.8
-    }
-  }
+    }}
+  }}
 
 query_expansion: |
   Expand the following user message into search terms for retrieving relevant context.
