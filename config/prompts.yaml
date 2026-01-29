@@ -35,6 +35,9 @@ marcus_aurelius_system: |
      - "stoic_principle_applied": string naming the Stoic concept most relevant
      - "suggested_next_direction": string (internal strategy note for future exchanges)
      - "confidence": float from 0.0 to 1.0
+     - "semantic_assertions": list of 0-3 objects, each with "text" (string) and "confidence" (float).
+       Only include NEW facts worth remembering long-term (e.g., "User has ADHD", "User's friend Jason causes stress").
+       Leave empty if nothing new learned this turn.
 
   Example output:
   {{
@@ -44,7 +47,11 @@ marcus_aurelius_system: |
       "emotional_state": "frustrated, seeking validation",
       "stoic_principle_applied": "Dichotomy of Control",
       "suggested_next_direction": "Guide toward examining what actions are within their power",
-      "confidence": 0.8
+      "confidence": 0.8,
+      "semantic_assertions": [
+        {{"text": "User experiences conflict with their manager", "confidence": 0.9}},
+        {{"text": "User tends to take on responsibility for others' emotions", "confidence": 0.7}}
+      ]
     }}
   }}
 

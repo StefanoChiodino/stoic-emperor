@@ -3,7 +3,7 @@ import yaml
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from src.models.schemas import EmperorResponse, PsychUpdate, Message
+from src.models.schemas import EmperorResponse, PsychUpdate, Message, SemanticAssertion
 from src.utils.llm_client import LLMClient
 from src.utils.config import load_config
 from src.utils.response_guard import guard_response
@@ -93,12 +93,23 @@ class EmperorBrain:
             data = json.loads(response_text)
 
             psych_data = data.get("psych_update", {})
+            raw_assertions = psych_data.get("semantic_assertions", [])
+            semantic_assertions = [
+                SemanticAssertion(
+                    text=a.get("text", ""),
+                    confidence=a.get("confidence", 0.5)
+                )
+                for a in raw_assertions
+                if a.get("text")
+            ]
+
             psych_update = PsychUpdate(
                 detected_patterns=psych_data.get("detected_patterns", []),
                 emotional_state=psych_data.get("emotional_state", "unknown"),
                 stoic_principle_applied=psych_data.get("stoic_principle_applied", ""),
                 suggested_next_direction=psych_data.get("suggested_next_direction", ""),
-                confidence=psych_data.get("confidence", 0.5)
+                confidence=psych_data.get("confidence", 0.5),
+                semantic_assertions=semantic_assertions
             )
 
             return EmperorResponse(

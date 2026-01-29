@@ -20,7 +20,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
-from src.models.schemas import Session, Message, User
+from src.models.schemas import Session, Message, User, SemanticInsight
 from src.utils.config import load_config
 from src.utils.auth import get_user_id_from_token, optional_auth, security
 
@@ -239,6 +239,31 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
         )
     except Exception:
         pass
+
+    if response.psych_update.semantic_assertions:
+        vectors = _state["vectors"]
+        for assertion in response.psych_update.semantic_assertions:
+            if assertion.confidence >= 0.5:
+                try:
+                    insight = SemanticInsight(
+                        user_id=user.id,
+                        source_message_id=emperor_msg.id,
+                        assertion=assertion.text,
+                        confidence=assertion.confidence
+                    )
+                    db.save_semantic_insight(insight)
+                    vectors.add(
+                        collection="semantic",
+                        ids=[insight.id],
+                        documents=[assertion.text],
+                        metadatas=[{
+                            "user_id": user.id,
+                            "source_message_id": emperor_msg.id,
+                            "confidence": assertion.confidence
+                        }]
+                    )
+                except Exception:
+                    pass
 
     _maybe_condense_and_analyze(user.id)
 

@@ -3,6 +3,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 import uuid
 
+class SemanticAssertion(BaseModel):
+    """A fact about the user worth remembering long-term"""
+    text: str = Field(description="A factual statement about the user")
+    confidence: float = Field(description="Confidence score 0.0-1.0", ge=0.0, le=1.0)
+
+
 class PsychUpdate(BaseModel):
     """Hidden psychological analysis layer"""
     detected_patterns: List[str] = Field(description="List of detected cognitive patterns or distortions")
@@ -10,6 +16,10 @@ class PsychUpdate(BaseModel):
     stoic_principle_applied: str = Field(description="The Stoic principle relevant to this situation")
     suggested_next_direction: str = Field(description="Internal strategy note for the therapist")
     confidence: float = Field(description="Confidence score 0.0-1.0")
+    semantic_assertions: List[SemanticAssertion] = Field(
+        default_factory=list,
+        description="0-3 new facts about the user worth remembering long-term"
+    )
 
 class EmperorResponse(BaseModel):
     """Full response from the Emperor"""
