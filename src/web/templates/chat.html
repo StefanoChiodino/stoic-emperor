@@ -10,8 +10,7 @@
 
 <div id="messages" class="flex-1 overflow-y-auto p-8 space-y-6">
     <div class="text-center py-20 text-gray-500">
-        <h3 class="text-2xl text-gray-400 mb-2">Begin Your Dialogue</h3>
-        <p>Share what's on your mind with the Stoic Emperor.</p>
+        <span class="loading-indicator justify-center"><span></span><span></span><span></span></span>
     </div>
 </div>
 
@@ -123,13 +122,22 @@
     });
 
     async function loadLatestSession() {
+        const container = document.getElementById('messages');
+        container.innerHTML = '<div class="text-center py-20 text-gray-500"><span class="loading-indicator justify-center"><span></span><span></span><span></span></span></div>';
+
         try {
             const headers = await getAuthHeaders();
             const response = await fetch('/api/sessions', { headers });
-            if (!response.ok) return;
+            if (!response.ok) {
+                showEmptyState();
+                return;
+            }
 
             const sessions = await response.json();
-            if (sessions.length === 0) return;
+            if (sessions.length === 0) {
+                showEmptyState();
+                return;
+            }
 
             const latest = sessions[0];
             window.currentSessionId = latest.id;
@@ -138,14 +146,25 @@
                 const msgResponse = await fetch(`/api/sessions/${latest.id}/messages`, { headers });
                 if (msgResponse.ok) {
                     const messages = await msgResponse.json();
-                    const container = document.getElementById('messages');
                     container.innerHTML = '';
                     messages.forEach(m => addMessage(m.role, m.content));
+                    return;
                 }
             }
+            showEmptyState();
         } catch (error) {
             console.error('Failed to load session:', error);
+            showEmptyState();
         }
+    }
+
+    function showEmptyState() {
+        document.getElementById('messages').innerHTML = `
+            <div class="text-center py-20 text-gray-500">
+                <h3 class="text-2xl text-gray-400 mb-2">Begin Your Dialogue</h3>
+                <p>Share what's on your mind with the Stoic Emperor.</p>
+            </div>
+        `;
     }
 
     document.addEventListener('DOMContentLoaded', async () => {

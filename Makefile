@@ -1,5 +1,8 @@
 .PHONY: lint format typecheck typecheck-strict test coverage ci install-hooks clean
 
+dev:
+	uvicorn src.web.api:app --reload
+
 lint:
 	ruff check src tests
 	ruff format --check src tests
@@ -21,9 +24,6 @@ coverage:
 	pytest --cov --cov-report=html --cov-report=term-missing
 
 ci: lint typecheck coverage
-
-install-hooks:
-	pre-commit install
 
 clean:
 	rm -rf .pytest_cache .coverage htmlcov .ruff_cache

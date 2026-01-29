@@ -1,9 +1,9 @@
-stoicmeditations.com
+stoicmeditations.com ++
+dearmarcus.ai ++
 stoicemperor.com
 stoicrelief.com
-theemperor.ai
+theemperor.ai ++
 stoicemperor.ai
-dearmarcus.ai
 
 
 emperor.talk
@@ -11,5 +11,4 @@ emperor.chat
 emperor.live
 TheEmperor.Live
 TheEmperor.Online
-TheEmperorReturns.com
 talkstoic.com

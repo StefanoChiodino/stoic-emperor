@@ -7,10 +7,10 @@
     <div class="w-80 bg-black/30 border-r border-white/10 flex flex-col shrink-0">
         <div class="p-5 border-b border-white/10">
             <h2 class="text-lg text-gold-500 mb-1">Your Sessions</h2>
-            <p id="sessions-count" class="text-sm text-gray-500">Loading...</p>
+            <p id="sessions-count" class="text-sm text-gray-500"><span class="loading-indicator"><span></span><span></span><span></span></span></p>
         </div>
         <div id="sessions-list" class="flex-1 overflow-y-auto">
-            <div class="p-20 text-center text-gray-500">Loading sessions...</div>
+            <div class="p-20 text-center text-gray-500"><span class="loading-indicator justify-center"><span></span><span></span><span></span></span></div>
         </div>
     </div>
 
@@ -88,8 +88,8 @@
         const titleEl = document.getElementById('messages-title');
         const session = window.historySessions.find(s => s.id === sessionId);
 
-        container.innerHTML = '<div class="p-20 text-center text-gray-500">Loading messages...</div>';
-        titleEl.textContent = session ? formatDate(session.created_at) : 'Loading...';
+        container.innerHTML = '<div class="p-20 text-center text-gray-500"><span class="loading-indicator justify-center"><span></span><span></span><span></span></span></div>';
+        titleEl.textContent = session ? formatDate(session.created_at) : '';
 
         try {
             const headers = await getAuthHeaders();
