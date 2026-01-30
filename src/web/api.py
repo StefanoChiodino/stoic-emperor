@@ -4,10 +4,12 @@ import sys
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[logging.StreamHandler(sys.stderr)],
     force=True,
 )
 logger = logging.getLogger("stoic_emperor")
+logger.setLevel(logging.DEBUG)
+print("=== PYTHON PROCESS STARTED ===", file=sys.stderr, flush=True)
 logger.info("Python started")  # pragma: no cover
 
 from src.utils.privacy import disable_telemetry
@@ -63,9 +65,11 @@ def _check_env_vars():  # pragma: no cover
 
 @asynccontextmanager
 async def lifespan(app):  # pragma: no cover
+    print("=== LIFESPAN START ===", file=sys.stderr, flush=True)
     logger.info("FastAPI lifespan starting")
     _check_env_vars()
     yield
+    print("=== LIFESPAN END ===", file=sys.stderr, flush=True)
     logger.info("FastAPI shutdown")
 
 
