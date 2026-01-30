@@ -113,20 +113,12 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 
 def get_current_user_id(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> str:
-    if ENVIRONMENT == "development" and not credentials:
-        return DEFAULT_USER_ID
-
-    if not credentials:  # pragma: no cover
+    if not credentials:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    try:
-        from src.utils.auth import get_user_id_from_token
+    from src.utils.auth import get_user_id_from_token
 
-        return get_user_id_from_token(credentials)
-    except Exception:  # pragma: no cover
-        if ENVIRONMENT == "development":
-            return DEFAULT_USER_ID
-        raise
+    return get_user_id_from_token(credentials)
 
 
 static_path = Path(__file__).parent / "static"
