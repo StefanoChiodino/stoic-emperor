@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import anthropic
 import yaml
 from openai import OpenAI
 
@@ -43,6 +44,11 @@ class ConsensusResult:
         }
 
 
+def _is_claude_model(model: str) -> bool:
+    model_lower = model.lower()
+    return "claude" in model_lower or "sonnet" in model_lower or "opus" in model_lower or "haiku" in model_lower
+
+
 class AegeanConsensusProtocol:
     def __init__(
         self,
@@ -64,9 +70,19 @@ class AegeanConsensusProtocol:
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
         base_url = os.getenv("LLM_BASE_URL")
-        api_key = os.getenv("OPENAI_API_KEY")
-        self.client_a = OpenAI(api_key=api_key, base_url=base_url)
-        self.client_b = OpenAI(api_key=api_key, base_url=base_url)
+        openai_key = os.getenv("OPENAI_API_KEY")
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+
+        self.openai_client: OpenAI | None = None
+        self.anthropic_client: anthropic.Anthropic | None = None
+
+        if openai_key:
+            self.openai_client = OpenAI(
+                api_key=openai_key,
+                base_url=base_url if base_url and "anthropic" not in base_url else None,
+            )
+        if anthropic_key:
+            self.anthropic_client = anthropic.Anthropic(api_key=anthropic_key)
 
     def _load_prompts(self) -> dict[str, str]:
         prompts_path = Path("config/prompts.yaml")
@@ -101,17 +117,13 @@ class AegeanConsensusProtocol:
             if self.verbose:
                 print(f"\n   Round {round_num}/{max_rounds}")
 
-            output_a = self._generate(self.client_a, self.model_a, prompt_name, variables, temperature)
-            output_b = self._generate(self.client_b, self.model_b, prompt_name, variables, temperature)
+            output_a = self._generate(self.model_a, prompt_name, variables, temperature)
+            output_b = self._generate(self.model_b, prompt_name, variables, temperature)
 
             original_data = variables.get("source_data", "")
 
-            review_a_of_b = self._review_output(
-                self.client_a, self.model_a, output_b, context, critical_constructs, original_data
-            )
-            review_b_of_a = self._review_output(
-                self.client_b, self.model_b, output_a, context, critical_constructs, original_data
-            )
+            review_a_of_b = self._review_output(self.model_a, output_b, context, critical_constructs, original_data)
+            review_b_of_a = self._review_output(self.model_b, output_a, context, critical_constructs, original_data)
 
             current_round = ConsensusRound(
                 round_number=round_num,
@@ -175,23 +187,46 @@ class AegeanConsensusProtocol:
         self._log_consensus(result, prompt_name)
         return result
 
-    def _generate(
-        self, client: OpenAI, model: str, prompt_name: str, variables: dict[str, Any], temperature: float
-    ) -> str:
+    def _get_client_for_model(self, model: str) -> tuple[OpenAI | anthropic.Anthropic, str]:
+        is_claude = _is_claude_model(model)
+        if is_claude and self.anthropic_client:
+            return self.anthropic_client, "anthropic"
+        elif self.openai_client:
+            return self.openai_client, "openai"
+        elif self.anthropic_client:
+            return self.anthropic_client, "anthropic"
+        else:
+            raise ValueError("No LLM client configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.")
+
+    def _call_llm(self, model: str, prompt: str, temperature: float, max_tokens: int = 4000) -> str:
+        client, client_type = self._get_client_for_model(model)
+        if client_type == "anthropic":
+            response = client.messages.create(  # type: ignore[union-attr]
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text if response.content else ""  # type: ignore[union-attr]
+        else:
+            response = client.chat.completions.create(  # type: ignore[union-attr]
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return (response.choices[0].message.content or "").strip()
+
+    def _generate(self, model: str, prompt_name: str, variables: dict[str, Any], temperature: float) -> str:
         if prompt_name not in self.prompts:
             raise ValueError(f"Prompt '{prompt_name}' not found")
 
         prompt_template = self.prompts[prompt_name]
         prompt = prompt_template.format(**variables)
-
-        response = client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": prompt}], temperature=temperature, max_tokens=4000
-        )
-        return (response.choices[0].message.content or "").strip()
+        return self._call_llm(model, prompt, temperature)
 
     def _review_output(
         self,
-        client: OpenAI,
         model: str,
         output_to_review: str,
         context: str,
@@ -216,11 +251,7 @@ Respond with JSON:
   "reasoning": "Brief explanation"
 }}"""
 
-        response = client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": review_prompt}], temperature=0.3, max_tokens=1000
-        )
-
-        review_text = (response.choices[0].message.content or "").strip()
+        review_text = self._call_llm(model, review_prompt, temperature=0.3, max_tokens=1000)
 
         try:
             start = review_text.find("{")

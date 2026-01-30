@@ -3,23 +3,35 @@ from unittest.mock import MagicMock, patch
 
 class TestLLMClient:
     def test_initialization_with_defaults(self):
-        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
-            from src.utils.llm_client import LLMClient
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}, clear=False):
+            with patch("src.utils.llm_client.OpenAI"):
+                from src.utils.llm_client import LLMClient
 
-            client = LLMClient()
-            assert client.client is not None
+                client = LLMClient()
+                assert client.openai_client is not None
 
     def test_initialization_with_custom_api_key(self):
-        from src.utils.llm_client import LLMClient
+        with patch("src.utils.llm_client.OpenAI"):
+            from src.utils.llm_client import LLMClient
 
-        client = LLMClient(api_key="custom-key")
-        assert client.client is not None
+            client = LLMClient(api_key="custom-key")
+            assert client.openai_client is not None
 
     def test_initialization_with_base_url(self):
-        from src.utils.llm_client import LLMClient
+        with patch("src.utils.llm_client.OpenAI"):
+            from src.utils.llm_client import LLMClient
 
-        client = LLMClient(api_key="test-key", base_url="http://localhost:8000")
-        assert client.base_url == "http://localhost:8000"
+            client = LLMClient(api_key="test-key", base_url="http://localhost:8000")
+            assert client.base_url == "http://localhost:8000"
+
+    def test_initialization_with_anthropic_key(self):
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "anthropic-key"}, clear=False):
+            with patch("src.utils.llm_client.anthropic") as mock_anthropic:
+                from src.utils.llm_client import LLMClient
+
+                client = LLMClient()
+                assert client.anthropic_client is not None
+                mock_anthropic.Anthropic.assert_called_once()
 
     def test_generate_calls_openai(self):
         with patch("src.utils.llm_client.OpenAI") as mock_openai_class:
@@ -34,7 +46,7 @@ class TestLLMClient:
             from src.utils.llm_client import LLMClient
 
             client = LLMClient(api_key="test-key")
-            result = client.generate("Test prompt")
+            result = client.generate("Test prompt", model="gpt-4o")
 
             assert result == "Generated response"
             mock_client.chat.completions.create.assert_called_once()
@@ -52,7 +64,7 @@ class TestLLMClient:
             from src.utils.llm_client import LLMClient
 
             client = LLMClient(api_key="test-key")
-            result = client.generate("Test prompt", json_mode=True)
+            result = client.generate("Test prompt", json_mode=True, model="gpt-4o")
 
             assert result == '{"key": "value"}'
 
@@ -69,7 +81,7 @@ class TestLLMClient:
             from src.utils.llm_client import LLMClient
 
             client = LLMClient(api_key="test-key")
-            result = client.generate("Test prompt")
+            result = client.generate("Test prompt", model="gpt-4o")
 
             assert result == ""
 
@@ -109,8 +121,27 @@ class TestLLMClient:
             from src.utils.llm_client import LLMClient
 
             client = LLMClient(api_key="test-key")
-            result = client.generate_structured("Test prompt", TestModel)
+            result = client.generate_structured("Test prompt", TestModel, model="gpt-4o")
 
             assert isinstance(result, TestModel)
             assert result.name == "test"
             assert result.value == 42
+
+    def test_generate_uses_anthropic_for_claude_model(self):
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "anthropic-key"}, clear=False):
+            with patch("src.utils.llm_client.anthropic") as mock_anthropic_module:
+                mock_client = MagicMock()
+                mock_anthropic_module.Anthropic.return_value = mock_client
+
+                mock_response = MagicMock()
+                mock_response.content = [MagicMock()]
+                mock_response.content[0].text = "Claude response"
+                mock_client.messages.create.return_value = mock_response
+
+                from src.utils.llm_client import LLMClient
+
+                client = LLMClient()
+                result = client.generate("Test prompt", model="claude-3-5-sonnet-20241022")
+
+                assert result == "Claude response"
+                mock_client.messages.create.assert_called_once()

@@ -6,6 +6,7 @@ import tiktoken
 from src.core.aegean_consensus import AegeanConsensusProtocol
 from src.infrastructure.database import Database
 from src.models.schemas import CondensedSummary, Message
+from src.utils.llm_client import LLMClient
 
 
 class CondensationManager:
@@ -127,18 +128,13 @@ class CondensationManager:
             content = result.final_output
             consensus_log = result.to_dict()
         else:
-            import os
-
-            from openai import OpenAI
-
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            response = client.chat.completions.create(
+            llm = LLMClient()
+            content = llm.generate(
+                prompt=prompt_text,
                 model=self.config["models"]["main"],
-                messages=[{"role": "user", "content": prompt_text}],
                 temperature=0.7,
                 max_tokens=2000,
             )
-            content = (response.choices[0].message.content or "").strip()
             consensus_log = None
 
         summary = CondensedSummary(
@@ -223,18 +219,13 @@ class CondensationManager:
             content = result.final_output
             consensus_log = result.to_dict()
         else:
-            import os
-
-            from openai import OpenAI
-
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            response = client.chat.completions.create(
+            llm = LLMClient()
+            content = llm.generate(
+                prompt=prompt_text,
                 model=self.config["models"]["main"],
-                messages=[{"role": "user", "content": prompt_text}],
                 temperature=0.7,
                 max_tokens=2000,
             )
-            content = (response.choices[0].message.content or "").strip()
             consensus_log = None
 
         new_summary = CondensedSummary(

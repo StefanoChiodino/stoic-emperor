@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Any
 
+import anthropic
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -10,14 +11,46 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 logger = logging.getLogger(__name__)
 
 
+def _is_claude_model(model: str) -> bool:
+    model_lower = model.lower()
+    return "claude" in model_lower or "sonnet" in model_lower or "opus" in model_lower or "haiku" in model_lower
+
+
 class LLMClient:
     def __init__(self, api_key: str | None = None, base_url: str | None = None, timeout: float = 120.0):
         self.base_url = base_url or os.getenv("LLM_BASE_URL")
-        self.client = OpenAI(
-            api_key=api_key or os.getenv("OPENAI_API_KEY"),
-            base_url=self.base_url,
-            timeout=timeout,
-        )
+        self.timeout = timeout
+
+        openai_key = api_key or os.getenv("OPENAI_API_KEY")
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+
+        self.openai_client: OpenAI | None = None
+        self.anthropic_client: anthropic.Anthropic | None = None
+
+        if openai_key:
+            self.openai_client = OpenAI(
+                api_key=openai_key,
+                base_url=self.base_url if self.base_url and "anthropic" not in self.base_url else None,
+                timeout=timeout,
+            )
+
+        if anthropic_key:
+            self.anthropic_client = anthropic.Anthropic(
+                api_key=anthropic_key,
+                timeout=timeout,
+            )
+
+    def _get_client_for_model(self, model: str) -> tuple[OpenAI | anthropic.Anthropic, str]:
+        is_claude = _is_claude_model(model)
+
+        if is_claude and self.anthropic_client:
+            return self.anthropic_client, "anthropic"
+        elif self.openai_client:
+            return self.openai_client, "openai"
+        elif self.anthropic_client:
+            return self.anthropic_client, "anthropic"
+        else:
+            raise ValueError("No LLM client configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable.")
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     def generate(
@@ -29,32 +62,45 @@ class LLMClient:
         max_tokens: int = 1000,
         json_mode: bool = False,
     ) -> str:
-        messages: list[ChatCompletionMessageParam] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
-        ]
+        client, client_type = self._get_client_for_model(model)
+        is_claude = _is_claude_model(model)
 
-        is_claude = "sonnet" in model.lower() or "claude" in model.lower() or "opus" in model.lower()
-        use_json_format = json_mode and not is_claude
+        logger.debug(f"LLM request: model={model}, client={client_type}, json_mode={json_mode}")
 
-        logger.debug(f"LLM request: model={model}, json_mode={json_mode}, use_json_format={use_json_format}")
+        if client_type == "anthropic":
+            json_instruction = "\n\nRespond with valid JSON only." if json_mode else ""
+            response = client.messages.create(  # type: ignore[union-attr]
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt + json_instruction}],
+            )
+            content = response.content[0].text if response.content else ""  # type: ignore[union-attr]
+        else:
+            messages: list[ChatCompletionMessageParam] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            use_json_format = json_mode and not is_claude
 
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if use_json_format:
-            kwargs["response_format"] = {"type": "json_object"}
+            kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            if use_json_format:
+                kwargs["response_format"] = {"type": "json_object"}
 
-        response = self.client.chat.completions.create(**kwargs)
+            response = client.chat.completions.create(**kwargs)  # type: ignore[union-attr]
+            content = (response.choices[0].message.content or "").strip()
 
-        content = (response.choices[0].message.content or "").strip()
+        content = content.strip()
         logger.debug(f"LLM response length: {len(content)}, first 200 chars: {content[:200]}")
 
         if not content:
-            logger.error(f"Empty response from LLM. Full response object: {response}")
+            logger.error("Empty response from LLM")
 
         return content
 
@@ -88,6 +134,7 @@ class LLMClient:
             raise
 
     def get_embedding(self, text: str, model: str = "text-embedding-3-small") -> list[float]:
-        """Get embedding for text"""
+        if not self.openai_client:
+            raise ValueError("Embeddings require OpenAI API. Set OPENAI_API_KEY environment variable.")
         text = text.replace("\n", " ")
-        return self.client.embeddings.create(input=[text], model=model).data[0].embedding
+        return self.openai_client.embeddings.create(input=[text], model=model).data[0].embedding

@@ -128,16 +128,14 @@ class TestCondensationManager:
 
         assert isinstance(should, bool)
 
-    @patch("openai.OpenAI")
-    def test_condense_chunk_creates_summary(self, mock_openai_class, db_with_messages, test_config):
+    @patch("src.memory.condensation.LLMClient")
+    def test_condense_chunk_creates_summary(self, mock_llm_class, db_with_messages, test_config):
         db, user, session, messages = db_with_messages
         manager = CondensationManager(db, test_config)
 
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content.strip.return_value = "Condensed summary content"
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_openai_class.return_value = mock_client
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "Condensed summary content"
+        mock_llm_class.return_value = mock_llm
 
         chunk_messages = messages[:4]
 
@@ -153,17 +151,15 @@ class TestCondensationManager:
         assert summary.period_start == chunk_messages[0].created_at
         assert summary.period_end == chunk_messages[-1].created_at
 
-    @patch("openai.OpenAI")
-    def test_condense_summaries_creates_higher_level(self, mock_openai_class, test_db_path, test_config):
+    @patch("src.memory.condensation.LLMClient")
+    def test_condense_summaries_creates_higher_level(self, mock_llm_class, test_db_path, test_config):
         db = Database(test_db_path)
         user = User(id="test_user")
         db.create_user(user)
 
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content.strip.return_value = "Level 2 summary"
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_openai_class.return_value = mock_client
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "Level 2 summary"
+        mock_llm_class.return_value = mock_llm
 
         summary1 = CondensedSummary(
             user_id=user.id,
@@ -261,15 +257,13 @@ class TestCondensationManager:
         )
         assert not has_l1_for_same_period
 
-    @patch("openai.OpenAI")
-    def test_maybe_condense_triggers_when_threshold_exceeded(self, mock_openai_class, db_with_messages, test_config):
+    @patch("src.memory.condensation.LLMClient")
+    def test_maybe_condense_triggers_when_threshold_exceeded(self, mock_llm_class, db_with_messages, test_config):
         db, user, session, messages = db_with_messages
 
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content.strip.return_value = "Condensed"
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_openai_class.return_value = mock_client
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "Condensed"
+        mock_llm_class.return_value = mock_llm
 
         manager = CondensationManager(db, test_config)
 

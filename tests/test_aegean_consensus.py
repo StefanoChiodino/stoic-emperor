@@ -110,8 +110,7 @@ class TestAegeanConsensusProtocol:
                 verbose=False,
                 output_folder=str(temp_dir / "consensus_logs"),
             )
-            protocol.client_a = mock_client
-            protocol.client_b = mock_client
+            protocol.openai_client = mock_client
             return protocol
 
     def test_initialization(self, temp_dir):
@@ -152,10 +151,9 @@ class TestAegeanConsensusProtocol:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "Generated content"
-        consensus_protocol.client_a.chat.completions.create.return_value = mock_response
+        consensus_protocol.openai_client.chat.completions.create.return_value = mock_response
 
         result = consensus_protocol._generate(
-            consensus_protocol.client_a,
             "gpt-4",
             "test_prompt",
             {"input": "test input"},
@@ -163,12 +161,11 @@ class TestAegeanConsensusProtocol:
         )
 
         assert result == "Generated content"
-        consensus_protocol.client_a.chat.completions.create.assert_called_once()
+        consensus_protocol.openai_client.chat.completions.create.assert_called_once()
 
     def test_generate_missing_prompt(self, consensus_protocol):
         with pytest.raises(ValueError, match="Prompt 'nonexistent' not found"):
             consensus_protocol._generate(
-                consensus_protocol.client_a,
                 "gpt-4",
                 "nonexistent",
                 {},
@@ -186,10 +183,9 @@ class TestAegeanConsensusProtocol:
                 "reasoning": "Good analysis",
             }
         )
-        consensus_protocol.client_a.chat.completions.create.return_value = mock_response
+        consensus_protocol.openai_client.chat.completions.create.return_value = mock_response
 
         result = consensus_protocol._review_output(
-            consensus_protocol.client_a,
             "gpt-4",
             "Output to review",
             "context",
@@ -204,10 +200,9 @@ class TestAegeanConsensusProtocol:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "Not valid JSON at all"
-        consensus_protocol.client_a.chat.completions.create.return_value = mock_response
+        consensus_protocol.openai_client.chat.completions.create.return_value = mock_response
 
         result = consensus_protocol._review_output(
-            consensus_protocol.client_a,
             "gpt-4",
             "Output to review",
             "context",
@@ -343,22 +338,15 @@ class TestAegeanConsensusProtocol:
             )
             return r
 
-        call_count = {"a": 0, "b": 0}
+        call_count = {"calls": 0}
 
-        def side_effect_a(*args, **kwargs):
-            call_count["a"] += 1
-            if call_count["a"] % 2 == 1:
+        def side_effect(*args, **kwargs):
+            call_count["calls"] += 1
+            if call_count["calls"] % 2 == 1:
                 return make_generate_response()
             return make_review_response()
 
-        def side_effect_b(*args, **kwargs):
-            call_count["b"] += 1
-            if call_count["b"] % 2 == 1:
-                return make_generate_response()
-            return make_review_response()
-
-        consensus_protocol.client_a.chat.completions.create.side_effect = side_effect_a
-        consensus_protocol.client_b.chat.completions.create.side_effect = side_effect_b
+        consensus_protocol.openai_client.chat.completions.create.side_effect = side_effect
 
         result = consensus_protocol.reach_consensus(
             prompt_name="test_prompt",
@@ -388,22 +376,15 @@ class TestAegeanConsensusProtocol:
             )
             return r
 
-        call_count = {"a": 0, "b": 0}
+        call_count = {"calls": 0}
 
-        def side_effect_a(*args, **kwargs):
-            call_count["a"] += 1
-            if call_count["a"] % 2 == 1:
+        def side_effect(*args, **kwargs):
+            call_count["calls"] += 1
+            if call_count["calls"] % 2 == 1:
                 return make_generate_response()
             return make_review_response()
 
-        def side_effect_b(*args, **kwargs):
-            call_count["b"] += 1
-            if call_count["b"] % 2 == 1:
-                return make_generate_response()
-            return make_review_response()
-
-        consensus_protocol.client_a.chat.completions.create.side_effect = side_effect_a
-        consensus_protocol.client_b.chat.completions.create.side_effect = side_effect_b
+        consensus_protocol.openai_client.chat.completions.create.side_effect = side_effect
 
         result = consensus_protocol.reach_consensus(
             prompt_name="test_prompt",
@@ -435,22 +416,15 @@ class TestAegeanConsensusProtocol:
             )
             return r
 
-        call_count = {"a": 0, "b": 0}
+        call_count = {"calls": 0}
 
-        def side_effect_a(*args, **kwargs):
-            call_count["a"] += 1
-            if call_count["a"] % 2 == 1:
+        def side_effect(*args, **kwargs):
+            call_count["calls"] += 1
+            if call_count["calls"] % 2 == 1:
                 return make_generate_response()
             return make_review_response()
 
-        def side_effect_b(*args, **kwargs):
-            call_count["b"] += 1
-            if call_count["b"] % 2 == 1:
-                return make_generate_response()
-            return make_review_response()
-
-        consensus_protocol.client_a.chat.completions.create.side_effect = side_effect_a
-        consensus_protocol.client_b.chat.completions.create.side_effect = side_effect_b
+        consensus_protocol.openai_client.chat.completions.create.side_effect = side_effect
 
         result = consensus_protocol.reach_consensus(
             prompt_name="test_prompt",
