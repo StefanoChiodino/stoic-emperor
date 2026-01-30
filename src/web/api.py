@@ -40,9 +40,30 @@ logger.info("Imports complete, creating app...")  # pragma: no cover
 from contextlib import asynccontextmanager
 
 
+def _check_env_vars():  # pragma: no cover
+    required = ["DATABASE_URL"]
+    recommended = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+
+    missing_required = [v for v in required if not os.getenv(v)]
+    missing_recommended = [v for v in recommended if not os.getenv(v)]
+
+    if missing_required:
+        logger.error(f"MISSING REQUIRED ENV VARS: {missing_required}")
+        logger.error("The app will fail on first request without these!")
+    else:
+        logger.info(f"Required env vars OK: {required}")
+
+    if missing_recommended:
+        logger.warning(f"Missing recommended env vars: {missing_recommended}")
+
+    port = os.getenv("PORT", "not set")
+    logger.info(f"PORT={port}, ENVIRONMENT={os.getenv('ENVIRONMENT', 'not set')}")
+
+
 @asynccontextmanager
 async def lifespan(app):  # pragma: no cover
     logger.info("FastAPI lifespan starting")
+    _check_env_vars()
     yield
     logger.info("FastAPI shutdown")
 
