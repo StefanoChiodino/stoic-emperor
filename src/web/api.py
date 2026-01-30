@@ -196,6 +196,11 @@ async def analysis(request: Request):
     return templates.TemplateResponse("analysis.html", {"request": request, "active_page": "analysis"})
 
 
+@app.get("/terms")
+async def terms(request: Request):
+    return templates.TemplateResponse("terms.html", {"request": request})
+
+
 @app.get("/api/config")
 async def get_config():
     return {"supabase_url": SUPABASE_URL, "supabase_anon_key": SUPABASE_ANON_KEY, "environment": ENVIRONMENT}
