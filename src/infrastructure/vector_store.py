@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -7,7 +8,28 @@ from typing import Any
 from urllib.parse import urlparse
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+
+class LocalEmbeddingModel:
+    def __init__(self, dimension: int = 384) -> None:
+        self.dimension = dimension
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        embeddings: list[np.ndarray] = []
+        for text in texts:
+            vector = np.zeros(self.dimension, dtype=np.float32)
+            for token in text.lower().split():
+                digest = hashlib.sha256(token.encode("utf-8")).digest()
+                idx = int.from_bytes(digest[:4], "big") % self.dimension
+                sign = 1.0 if digest[4] % 2 == 0 else -1.0
+                vector[idx] += sign
+            norm = np.linalg.norm(vector)
+            if norm > 0:
+                vector /= norm
+            embeddings.append(vector)
+        if embeddings:
+            return np.stack(embeddings)
+        return np.zeros((0, self.dimension), dtype=np.float32)
 
 
 class VectorStore:
@@ -32,7 +54,7 @@ class VectorStore:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
             self._sqlite_path = db_path
 
-        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.embedding_model = LocalEmbeddingModel(384)
         self._ensure_extension()
         self._ensure_collections()
 
