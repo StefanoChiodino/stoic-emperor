@@ -44,15 +44,16 @@ def _check_env_vars():  # pragma: no cover
     required = ["DATABASE_URL"]
     recommended = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
 
-    missing_required = [v for v in required if not os.getenv(v)]
+    for var in required:
+        value = os.getenv(var)
+        if value is None:
+            logger.error(f"ENV VAR {var} is NOT SET (None)")
+        elif value == "":
+            logger.error(f"ENV VAR {var} is SET BUT EMPTY")
+        else:
+            logger.info(f"ENV VAR {var} is set (length={len(value)}, starts={value[:20]}...)")
+
     missing_recommended = [v for v in recommended if not os.getenv(v)]
-
-    if missing_required:
-        logger.error(f"MISSING REQUIRED ENV VARS: {missing_required}")
-        logger.error("The app will fail on first request without these!")
-    else:
-        logger.info(f"Required env vars OK: {required}")
-
     if missing_recommended:
         logger.warning(f"Missing recommended env vars: {missing_recommended}")
 
