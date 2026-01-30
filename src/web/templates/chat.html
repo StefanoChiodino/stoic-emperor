@@ -160,6 +160,9 @@
         container.innerHTML = '<div class="text-center py-20 text-gray-500"><span class="loading-indicator justify-center"><span></span><span></span><span></span></span></div>';
 
         try {
+            await initSupabase();
+            const session = await checkAuth();
+            if (!session) return;
             const headers = await getAuthHeaders();
             const response = await fetch('/api/sessions', { headers });
             if (!response.ok) {
@@ -176,16 +179,20 @@
             const latest = sessions[0];
             window.currentSessionId = latest.id;
 
-            if (latest.message_count > 0) {
-                const msgResponse = await fetch(`/api/sessions/${latest.id}/messages`, { headers });
-                if (msgResponse.ok) {
-                    const messages = await msgResponse.json();
-                    container.innerHTML = '';
-                    messages.forEach(m => addMessage(m.role, m.content));
-                    return;
-                }
+            const msgResponse = await fetch(`/api/sessions/${latest.id}/messages`, { headers });
+            if (!msgResponse.ok) {
+                showEmptyState();
+                return;
             }
-            showEmptyState();
+
+            const messages = await msgResponse.json();
+            if (messages.length === 0) {
+                showEmptyState();
+                return;
+            }
+
+            container.innerHTML = '';
+            messages.forEach(m => addMessage(m.role, m.content));
         } catch (error) {
             console.error('Failed to load session:', error);
             showEmptyState();

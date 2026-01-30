@@ -161,6 +161,9 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         await new Promise(r => setTimeout(r, 100));
+        await initSupabase();
+        const session = await checkAuth();
+        if (!session) return;
         await loadSessions();
     });
 </script>
