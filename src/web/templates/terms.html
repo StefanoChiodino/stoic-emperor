@@ -9,47 +9,93 @@
         <p class="text-gray-500">Last Updated: January 2026</p>
     </div>
 
+    <!-- 1. Age Restriction (Critical for UK Online Safety Act / GDPR) -->
+    <section class="space-y-4 bg-yellow-900/10 border-l-4 border-yellow-500/50 p-4 rounded-r">
+        <h2 class="text-xl font-semibold text-yellow-400">1. Age Restriction</h2>
+        <p>
+            You must be at least <strong>18 years old</strong> to use this Service. By accessing Stoic Emperor, you confirm you are of legal age to form a binding contract. This service involves complex psychological themes and is not suitable for minors.
+        </p>
+    </section>
+
     <section class="space-y-4">
-        <h2 class="text-xl font-semibold text-white">1. Nature of Service</h2>
+        <h2 class="text-xl font-semibold text-white">2. Nature of Service</h2>
         <p>
             Stoic Emperor is an AI-powered chatbot designed to provide philosophical advice and conversation based on the persona of Marcus Aurelius. It utilizes a hybrid analysis architecture to simulate Stoic guidance.
         </p>
     </section>
 
+    <!-- 3. Medical Disclaimer (Strengthened for UK MDR 2002) -->
     <section class="space-y-4 bg-red-900/10 border-l-4 border-red-500/50 p-4 rounded-r">
-        <h2 class="text-xl font-semibold text-red-400">2. Medical Disclaimer (Critical)</h2>
+        <h2 class="text-xl font-semibold text-red-400">3. Medical Disclaimer (Critical)</h2>
         <p>
-            <strong>This application is NOT a replacement for professional medical, psychological, or psychiatric advice, diagnosis, or treatment.</strong>
+            <strong>This application is NOT a medical device under the UK Medical Devices Regulations 2002.</strong>
         </p>
         <p>
-            The "Stoic Emperor" is an artificial intelligence, not a licensed therapist or doctor. Its insights are philosophical in nature. If you are in crisis, experiencing a medical emergency, or having thoughts of self-harm, please contact emergency services (911/999) or a mental health professional immediately.
+            The "Stoic Emperor" is an artificial intelligence, not a licensed therapist, psychologist, or doctor. It does not:
+        </p>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>Diagnose, treat, or monitor any mental health condition.</li>
+            <li>Provide clinical recommendations or crisis intervention.</li>
+            <li>Substitute for professional medical judgment.</li>
+        </ul>
+        <p>
+            If you are in crisis, experiencing a medical emergency, or having thoughts of self-harm, please contact emergency services (999 in the UK) or a mental health professional immediately.
         </p>
     </section>
 
     <section class="space-y-4">
-        <h2 class="text-xl font-semibold text-white">3. Privacy & Data Architecture</h2>
+        <h2 class="text-xl font-semibold text-white">4. Privacy & Data Architecture</h2>
         <p>
-            We adhere to a strict "Privacy First" architecture.
+            We adhere to a strict "Privacy First" architecture. However, under the <strong>UK Data Protection Act 2018 (GDPR)</strong>, you have specific rights.
         </p>
         <ul class="list-disc pl-5 space-y-2 text-gray-400">
-            <li><strong>Private Infrastructure:</strong> Your conversation data resides in our private PostgreSQL instance.</li>
-            <li><strong>No Telemetry:</strong> We strictly disable telemetry. We do not sell or share your personal conversation data with third-party advertisers.</li>
-            <li><strong>Data Persistence:</strong> Conversations are stored to provide context for the "Emperor's" memory and consensus analysis. You may request account deletion at any time.</li>
+            <li><strong>Data Storage:</strong> Your conversation data is stored in our private database to maintain conversation context ("memory").</li>
+            <li><strong>No Third-Party Sharing:</strong> We do not sell your personal data or share it with advertisers.</li>
+            <li><strong>Your Rights:</strong> You may request a copy of your data or the deletion of your account/history at any time by contacting us (see Section 8).</li>
+            <li><strong>Withdrawal:</strong> You may stop using the service at any time.</li>
         </ul>
+        <p class="text-sm italic text-gray-500">Note: A full Privacy Policy detailing our lawful basis for processing (Legitimate Interests/Consent) is available upon request.</p>
     </section>
 
     <section class="space-y-4">
-        <h2 class="text-xl font-semibold text-white">4. User Conduct</h2>
+        <h2 class="text-xl font-semibold text-white">5. User Conduct</h2>
         <p>
             You agree to use this service lawfully. You will not use the bot to generate harmful, illegal, or abusive content. We reserve the right to terminate access for users who violate these standards.
         </p>
     </section>
 
     <section class="space-y-4">
-        <h2 class="text-xl font-semibold text-white">5. Limitation of Liability</h2>
+        <h2 class="text-xl font-semibold text-white">6. Limitation of Liability</h2>
         <p>
-            The service is provided "as is" without warranties of any kind. We are not liable for any actions taken based on the advice provided by the AI. Philosophical guidance is subjective; apply it at your own risk.
+            To the maximum extent permitted by English law:
         </p>
+        <ul class="list-disc pl-5 space-y-1">
+            <li>The service is provided "as is" without warranties of satisfactory quality or fitness for a particular purpose.</li>
+            <li>We are not liable for any actions taken based on the advice provided by the AI. Philosophical guidance is subjective; apply it at your own risk.</li>
+            <li>Nothing in these terms excludes liability for death or personal injury caused by our negligence or for fraud.</li>
+        </ul>
+    </section>
+
+    <!-- 7. Governing Law (Critical for Jurisdiction) -->
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">7. Governing Law</h2>
+        <p>
+            These Terms are governed by the laws of <strong>England and Wales</strong>. Any disputes shall be subject to the exclusive jurisdiction of the courts of England and Wales.
+        </p>
+    </section>
+
+    <!-- 8. Contact Information (Required by E-Commerce Regs) -->
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">8. Contact Information</h2>
+        <p>
+            For support, data deletion requests, or legal inquiries, please contact the operator:
+        </p>
+        <div class="bg-black/20 p-4 rounded text-sm font-mono">
+            <p>Stefano Chiodino</p>
+            <!-- Replace with actual dedicated support email -->
+            <p>Email: support@stoic-emperor.app</p>
+            <p>Location: Leeds, UK</p>
+        </div>
     </section>
 </div>
 {% endblock %}
