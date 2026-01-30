@@ -22,7 +22,8 @@ RUN tailwindcss -i ./src/web/static/input.css -o ./src/web/static/output.css --m
 ENV PYTHONPATH=/app
 ENV ENVIRONMENT=production
 ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.web.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD sh -c "uvicorn src.web.api:app --host 0.0.0.0 --port ${PORT}"
