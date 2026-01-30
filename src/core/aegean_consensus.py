@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -8,6 +9,10 @@ from typing import Any
 import anthropic
 import yaml
 from openai import OpenAI
+
+from src.utils.llm_adapter import AnthropicAdapter, LLMAdapter, OpenAIChatAdapter
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -187,35 +192,40 @@ class AegeanConsensusProtocol:
         self._log_consensus(result, prompt_name)
         return result
 
-    def _get_client_for_model(self, model: str) -> tuple[OpenAI | anthropic.Anthropic, str]:
+    def _get_adapter_for_model(self, model: str) -> tuple[LLMAdapter, str]:
         is_claude = _is_claude_model(model)
         if is_claude and self.anthropic_client:
-            return self.anthropic_client, "anthropic"
+            return AnthropicAdapter(self.anthropic_client), "anthropic"
         elif self.openai_client:
-            return self.openai_client, "openai"
+            return OpenAIChatAdapter(self.openai_client), "openai"
         elif self.anthropic_client:
-            return self.anthropic_client, "anthropic"
+            return AnthropicAdapter(self.anthropic_client), "anthropic"
         else:
             raise ValueError("No LLM client configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.")
 
+    def _log_usage(self, model: str, client_type: str, input_tokens: int | None, output_tokens: int | None) -> None:
+        if input_tokens is None and output_tokens is None:
+            return
+        logger.info(
+            "LLM tokens: model=%s client=%s input=%s output=%s",
+            model,
+            client_type,
+            input_tokens,
+            output_tokens,
+        )
+
     def _call_llm(self, model: str, prompt: str, temperature: float, max_tokens: int = 4000) -> str:
-        client, client_type = self._get_client_for_model(model)
-        if client_type == "anthropic":
-            response = client.messages.create(  # type: ignore[union-attr]
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text if response.content else ""  # type: ignore[union-attr]
-        else:
-            response = client.chat.completions.create(  # type: ignore[union-attr]
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return (response.choices[0].message.content or "").strip()
+        adapter, client_type = self._get_adapter_for_model(model)
+        result = adapter.generate(
+            prompt=prompt,
+            system_prompt="",
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=False,
+        )
+        self._log_usage(model, client_type, result.input_tokens, result.output_tokens)
+        return result.content
 
     def _generate(self, model: str, prompt_name: str, variables: dict[str, Any], temperature: float) -> str:
         if prompt_name not in self.prompts:

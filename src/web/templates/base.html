@@ -49,19 +49,28 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         window.supabaseClient = window.supabaseClient || null;
+        window.supabaseInitPromise = window.supabaseInitPromise || null;
         window.currentUser = window.currentUser || null;
 
         async function initSupabase() {
-            if (window.supabaseClient) return;
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                if (config.supabase_url && config.supabase_anon_key) {
-                    window.supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
+            if (window.supabaseClient) return window.supabaseClient;
+            if (window.supabaseInitPromise) return window.supabaseInitPromise;
+            window.supabaseInitPromise = (async () => {
+                try {
+                    const response = await fetch('/api/config');
+                    const config = await response.json();
+                    if (config.supabase_url && config.supabase_anon_key) {
+                        window.supabaseClient = window.supabase.createClient(config.supabase_url, config.supabase_anon_key);
+                    }
+                    return window.supabaseClient;
+                } catch (error) {
+                    console.error('Failed to init Supabase:', error);
+                    return null;
+                } finally {
+                    window.supabaseInitPromise = null;
                 }
-            } catch (error) {
-                console.error('Failed to init Supabase:', error);
-            }
+            })();
+            return window.supabaseInitPromise;
         }
 
         async function checkAuth() {

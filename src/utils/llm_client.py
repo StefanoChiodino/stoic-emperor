@@ -5,8 +5,9 @@ from typing import Any
 
 import anthropic
 from openai import OpenAI
-from openai.types.chat import ChatCompletionMessageParam
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+from src.utils.llm_adapter import AnthropicAdapter, LLMAdapter, OpenAIChatAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -40,15 +41,26 @@ class LLMClient:
                 timeout=timeout,
             )
 
-    def _get_client_for_model(self, model: str) -> tuple[OpenAI | anthropic.Anthropic, str]:
+    def _log_usage(self, model: str, client_type: str, input_tokens: int | None, output_tokens: int | None) -> None:
+        if input_tokens is None and output_tokens is None:
+            return
+        logger.info(
+            "LLM tokens: model=%s client=%s input=%s output=%s",
+            model,
+            client_type,
+            input_tokens,
+            output_tokens,
+        )
+
+    def _get_adapter_for_model(self, model: str) -> tuple[LLMAdapter, str]:
         is_claude = _is_claude_model(model)
 
         if is_claude and self.anthropic_client:
-            return self.anthropic_client, "anthropic"
+            return AnthropicAdapter(self.anthropic_client), "anthropic"
         elif self.openai_client:
-            return self.openai_client, "openai"
+            return OpenAIChatAdapter(self.openai_client), "openai"
         elif self.anthropic_client:
-            return self.anthropic_client, "anthropic"
+            return AnthropicAdapter(self.anthropic_client), "anthropic"
         else:
             raise ValueError("No LLM client configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable.")
 
@@ -62,41 +74,23 @@ class LLMClient:
         max_tokens: int = 1000,
         json_mode: bool = False,
     ) -> str:
-        client, client_type = self._get_client_for_model(model)
+        adapter, client_type = self._get_adapter_for_model(model)
         is_claude = _is_claude_model(model)
 
         logger.debug(f"LLM request: model={model}, client={client_type}, json_mode={json_mode}")
 
-        if client_type == "anthropic":
-            json_instruction = "\n\nRespond with valid JSON only." if json_mode else ""
-            response = client.messages.create(  # type: ignore[union-attr]
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt,
-                messages=[{"role": "user", "content": prompt + json_instruction}],
-            )
-            content = response.content[0].text if response.content else ""  # type: ignore[union-attr]
-        else:
-            messages: list[ChatCompletionMessageParam] = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ]
-            use_json_format = json_mode and not is_claude
+        adapter_json_mode = json_mode if client_type == "anthropic" else json_mode and not is_claude
+        result = adapter.generate(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=adapter_json_mode,
+        )
+        content = result.content.strip()
 
-            kwargs: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            if use_json_format:
-                kwargs["response_format"] = {"type": "json_object"}
-
-            response = client.chat.completions.create(**kwargs)  # type: ignore[union-attr]
-            content = (response.choices[0].message.content or "").strip()
-
-        content = content.strip()
+        self._log_usage(model, client_type, result.input_tokens, result.output_tokens)
         logger.debug(f"LLM response length: {len(content)}, first 200 chars: {content[:200]}")
 
         if not content:
