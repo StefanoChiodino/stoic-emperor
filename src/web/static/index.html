@@ -678,6 +678,21 @@
             `;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
+            return div;
+        }
+
+        function showError(text) {
+            let el = document.getElementById('chat-error');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'chat-error';
+                el.className = 'error-toast';
+                el.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 20px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#f87171;border-radius:8px;font-size:14px;z-index:1000;transition:opacity 0.3s';
+                document.body.appendChild(el);
+            }
+            el.textContent = text;
+            el.style.opacity = '1';
+            setTimeout(() => { el.style.opacity = '0'; }, 5000);
         }
 
         async function sendMessage() {
@@ -689,8 +704,9 @@
             sendBtn.disabled = true;
             input.value = '';
             input.style.height = 'auto';
+            localStorage.removeItem('chat_draft');
 
-            addMessage('user', message);
+            const userMsgEl = addMessage('user', message);
             document.getElementById('loading').classList.add('visible');
 
             try {
@@ -704,19 +720,40 @@
                     })
                 });
 
+                if (!response.ok) throw new Error('Request failed');
                 const data = await response.json();
                 currentSessionId = data.session_id;
                 addMessage('emperor', data.response);
                 loadAnalysisStatus();
             } catch (error) {
                 console.error('Failed to send message:', error);
-                addMessage('emperor', 'I apologize, but I am unable to respond at this moment. Please try again.');
+                userMsgEl.remove();
+                input.value = message;
+                autoResize(input);
+                showError('Failed to send. Your message is preserved—please try again.');
             } finally {
                 document.getElementById('loading').classList.remove('visible');
                 sendBtn.disabled = false;
                 input.focus();
             }
         }
+
+        (function initDraftPersistence() {
+            const input = document.getElementById('message-input');
+            if (!input) return;
+            input.addEventListener('input', () => {
+                if (input.value.trim()) {
+                    localStorage.setItem('chat_draft', input.value);
+                } else {
+                    localStorage.removeItem('chat_draft');
+                }
+            });
+            const savedDraft = localStorage.getItem('chat_draft');
+            if (savedDraft) {
+                input.value = savedDraft;
+                autoResize(input);
+            }
+        })();
 
         function handleKeydown(event) {
             if (event.key === 'Enter' && !event.shiftKey) {

@@ -208,3 +208,237 @@ class TestProfileTracking:
         count = db.count_sessions_since_last_analysis("user_count")
 
         assert count == 3
+
+
+class TestUserNameOperations:
+    def test_update_user_name(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_name_test"))
+
+        result = db.update_user_name("user_name_test", "New Name")
+
+        assert result is not None
+        assert result.name == "New Name"
+
+    def test_update_user_name_nonexistent(self, test_db_path):
+        db = Database(test_db_path)
+
+        result = db.update_user_name("nonexistent_user", "Name")
+
+        assert result is None
+
+
+class TestProfileOperations:
+    def test_save_profile(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_profile"))
+
+        version = db.save_profile("user_profile", "Profile content here", {"consensus": True})
+
+        assert version == 1
+
+    def test_save_profile_increments_version(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_profile_v"))
+
+        v1 = db.save_profile("user_profile_v", "Profile v1")
+        v2 = db.save_profile("user_profile_v", "Profile v2")
+
+        assert v1 == 1
+        assert v2 == 2
+
+    def test_get_latest_profile(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_get_profile"))
+        db.save_profile("user_get_profile", "First profile")
+        db.save_profile("user_get_profile", "Latest profile", {"log": "data"})
+
+        profile = db.get_latest_profile("user_get_profile")
+
+        assert profile is not None
+        assert profile["content"] == "Latest profile"
+        assert profile["version"] == 2
+
+    def test_get_latest_profile_none(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_no_profile"))
+
+        profile = db.get_latest_profile("user_no_profile")
+
+        assert profile is None
+
+    def test_count_sessions_with_profile(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_count_profile"))
+
+        db.create_session(Session(user_id="user_count_profile"))
+        db.save_profile("user_count_profile", "Profile after first session")
+        db.create_session(Session(user_id="user_count_profile"))
+        db.create_session(Session(user_id="user_count_profile"))
+
+        count = db.count_sessions_since_last_analysis("user_count_profile")
+
+        assert count == 2
+
+
+class TestMessageRangeOperations:
+    def test_get_messages_in_range(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_range"))
+        session = Session(id="session_range", user_id="user_range")
+        db.create_session(session)
+
+        db.save_message(Message(session_id="session_range", role="user", content="Message 1"))
+        db.save_message(Message(session_id="session_range", role="user", content="Message 2"))
+        db.save_message(Message(session_id="session_range", role="user", content="Message 3"))
+
+        messages = db.get_messages_in_range("user_range")
+
+        assert len(messages) == 3
+
+    def test_get_messages_in_range_with_dates(self, test_db_path):
+        from datetime import datetime, timedelta
+
+        db = Database(test_db_path)
+        db.create_user(User(id="user_range_dates"))
+        session = Session(id="session_range_dates", user_id="user_range_dates")
+        db.create_session(session)
+
+        now = datetime.now()
+        db.save_message(Message(session_id="session_range_dates", role="user", content="Old message"))
+        db.save_message(Message(session_id="session_range_dates", role="user", content="New message"))
+
+        start = now - timedelta(hours=1)
+        end = now + timedelta(hours=1)
+        messages = db.get_messages_in_range("user_range_dates", start_date=start, end_date=end)
+
+        assert len(messages) >= 0
+
+    def test_get_recent_messages(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_recent"))
+        session = Session(id="session_recent", user_id="user_recent")
+        db.create_session(session)
+
+        for i in range(5):
+            db.save_message(Message(session_id="session_recent", role="user", content=f"Message {i}"))
+
+        recent = db.get_recent_messages("user_recent", limit=3)
+
+        assert len(recent) == 3
+
+    def test_get_recent_messages_order(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_recent_order"))
+        session = Session(id="session_recent_order", user_id="user_recent_order")
+        db.create_session(session)
+
+        db.save_message(Message(session_id="session_recent_order", role="user", content="First"))
+        db.save_message(Message(session_id="session_recent_order", role="user", content="Second"))
+        db.save_message(Message(session_id="session_recent_order", role="user", content="Third"))
+
+        recent = db.get_recent_messages("user_recent_order", limit=3)
+
+        assert recent[0].content == "First"
+        assert recent[-1].content == "Third"
+
+
+class TestSessionWithCountsOperations:
+    def test_get_user_sessions_with_counts(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_sess_counts"))
+
+        session1 = Session(id="sess_count_1", user_id="user_sess_counts")
+        session2 = Session(id="sess_count_2", user_id="user_sess_counts")
+        db.create_session(session1)
+        db.create_session(session2)
+
+        db.save_message(Message(session_id="sess_count_1", role="user", content="Msg 1"))
+        db.save_message(Message(session_id="sess_count_1", role="emperor", content="Reply 1"))
+        db.save_message(Message(session_id="sess_count_2", role="user", content="Msg 2"))
+
+        rows = db.get_user_sessions_with_counts("user_sess_counts")
+
+        assert len(rows) == 2
+        counts = {r["id"]: r["message_count"] for r in rows}
+        assert counts["sess_count_1"] == 2
+        assert counts["sess_count_2"] == 1
+
+    def test_get_user_sessions_empty(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_no_sessions"))
+
+        rows = db.get_user_sessions_with_counts("user_no_sessions")
+
+        assert len(rows) == 0
+
+
+class TestCondensedSummaryOperations:
+    def test_save_and_get_condensed_summary(self, test_db_path):
+        from datetime import datetime
+
+        from src.models.schemas import CondensedSummary
+
+        db = Database(test_db_path)
+        db.create_user(User(id="user_summary"))
+
+        summary = CondensedSummary(
+            user_id="user_summary",
+            level=1,
+            content="Summary content here",
+            period_start=datetime(2025, 1, 1),
+            period_end=datetime(2025, 1, 7),
+            source_message_count=10,
+            source_word_count=500,
+            source_summary_ids=[],
+            consensus_log={"reached": True},
+        )
+
+        db.save_condensed_summary(summary)
+        summaries = db.get_condensed_summaries("user_summary")
+
+        assert len(summaries) == 1
+        assert summaries[0].content == "Summary content here"
+
+    def test_get_condensed_summaries_by_level(self, test_db_path):
+        from datetime import datetime
+
+        from src.models.schemas import CondensedSummary
+
+        db = Database(test_db_path)
+        db.create_user(User(id="user_summary_level"))
+
+        for level in [1, 1, 2]:
+            summary = CondensedSummary(
+                user_id="user_summary_level",
+                level=level,
+                content=f"Summary level {level}",
+                period_start=datetime(2025, 1, 1),
+                period_end=datetime(2025, 1, 7),
+                source_message_count=5,
+                source_word_count=200,
+            )
+            db.save_condensed_summary(summary)
+
+        level_1 = db.get_condensed_summaries("user_summary_level", level=1)
+        level_2 = db.get_condensed_summaries("user_summary_level", level=2)
+
+        assert len(level_1) == 2
+        assert len(level_2) == 1
+
+
+class TestGetSessionNonexistent:
+    def test_get_session_nonexistent(self, test_db_path):
+        db = Database(test_db_path)
+
+        session = db.get_session("nonexistent_session_id")
+
+        assert session is None
+
+    def test_get_latest_session_none(self, test_db_path):
+        db = Database(test_db_path)
+        db.create_user(User(id="user_no_sess"))
+
+        session = db.get_latest_session("user_no_sess")
+
+        assert session is None

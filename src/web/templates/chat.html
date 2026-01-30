@@ -84,6 +84,7 @@
         `;
         container.appendChild(div);
         container.scrollTop = container.scrollHeight;
+        return div;
     }
 
     function escapeHtml(text) {
@@ -100,7 +101,8 @@
 
         input.value = '';
         input.style.height = 'auto';
-        addMessage('user', message);
+        localStorage.removeItem('chat_draft');
+        const userMsgEl = addMessage('user', message);
         showLoading();
 
         try {
@@ -110,16 +112,48 @@
                 headers: { 'Content-Type': 'application/json', ...headers },
                 body: JSON.stringify({ message, session_id: window.currentSessionId })
             });
+            if (!response.ok) throw new Error('Request failed');
             const data = await response.json();
             window.currentSessionId = data.session_id;
             addMessage('emperor', data.response);
         } catch (error) {
             console.error('Chat error:', error);
-            addMessage('emperor', 'I apologize, but I am unable to respond at this moment.');
+            userMsgEl.remove();
+            input.value = message;
+            autoResize(input);
+            showError('Failed to send. Your message is preserved—please try again.');
         } finally {
             hideLoading();
         }
     });
+
+    function showError(text) {
+        let el = document.getElementById('chat-error');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'chat-error';
+            el.className = 'max-w-3xl mx-auto mb-4 p-3 bg-red-500/15 border border-red-500/30 text-red-400 rounded-lg text-sm';
+            document.getElementById('chat-form').parentNode.insertBefore(el, document.getElementById('chat-form'));
+        }
+        el.textContent = text;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+
+    const input = document.getElementById('message-input');
+    input.addEventListener('input', () => {
+        if (input.value.trim()) {
+            localStorage.setItem('chat_draft', input.value);
+        } else {
+            localStorage.removeItem('chat_draft');
+        }
+    });
+
+    const savedDraft = localStorage.getItem('chat_draft');
+    if (savedDraft) {
+        input.value = savedDraft;
+        autoResize(input);
+    }
 
     async function loadLatestSession() {
         const container = document.getElementById('messages');

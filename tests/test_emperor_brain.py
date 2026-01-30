@@ -81,10 +81,8 @@ class TestEmperorBrainUnit:
 
         brain = EmperorBrain(llm_client=MagicMock())
 
-        result = brain._parse_response("This is not JSON")
-
-        assert isinstance(result, EmperorResponse)
-        assert "parse_error" in result.psych_update.detected_patterns
+        with pytest.raises(json.JSONDecodeError):
+            brain._parse_response("This is not JSON")
 
     def test_parse_response_with_semantic_assertions(self):
         from unittest.mock import MagicMock

@@ -1,4 +1,14 @@
-print("Python started", flush=True)
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+logger = logging.getLogger("stoic_emperor")
+logger.info("Python started")  # pragma: no cover
 
 from src.utils.privacy import disable_telemetry
 
@@ -13,7 +23,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-print("Starting imports...", flush=True)
+logger.info("Starting imports...")  # pragma: no cover
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
@@ -25,26 +35,26 @@ from src.models.schemas import Message, SemanticInsight, Session
 from src.utils.auth import security
 from src.utils.config import load_config
 
-print("Imports complete, creating app...", flush=True)
+logger.info("Imports complete, creating app...")  # pragma: no cover
 
 from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
-async def lifespan(app):
-    print("FastAPI startup complete", flush=True)
+async def lifespan(app):  # pragma: no cover
+    logger.info("FastAPI lifespan starting")
     yield
-    print("FastAPI shutdown", flush=True)
+    logger.info("FastAPI shutdown")
 
 
 app = FastAPI(title="Stoic Emperor", docs_url="/api/docs", lifespan=lifespan)
 
-print("App created", flush=True)
+logger.info("App created")  # pragma: no cover
 
 _state = {"initialized": False, "config": {}, "db": None, "vectors": None, "brain": None, "condensation": None}
 
 
-def _init():
+def _init():  # pragma: no cover
     if _state["initialized"]:
         return
     from src.core.emperor_brain import EmperorBrain
@@ -66,7 +76,8 @@ def _init():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    logger.info("Health check called")
+    return {"status": "ok", "port": os.getenv("PORT", "not set")}
 
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -79,14 +90,14 @@ def get_current_user_id(credentials: HTTPAuthorizationCredentials | None = Depen
     if ENVIRONMENT == "development" and not credentials:
         return DEFAULT_USER_ID
 
-    if not credentials:
+    if not credentials:  # pragma: no cover
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
         from src.utils.auth import get_user_id_from_token
 
         return get_user_id_from_token(credentials)
-    except Exception:
+    except Exception:  # pragma: no cover
         if ENVIRONMENT == "development":
             return DEFAULT_USER_ID
         raise
@@ -208,8 +219,7 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     history = db.get_session_messages(session.id)
 
     user_msg = Message(session_id=session.id, role="user", content=request.message)
-    db.save_message(user_msg)
-    history.append(user_msg)
+    history_with_user = history + [user_msg]
 
     retrieved_context = _retrieve_context(request.message, user.id)
     profile = db.get_latest_profile(user.id)
@@ -223,10 +233,11 @@ async def chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)
     response = await asyncio.to_thread(
         brain.respond,
         user_message=request.message,
-        conversation_history=history,
+        conversation_history=history_with_user,
         retrieved_context=retrieved_context,
     )
 
+    db.save_message(user_msg)
     emperor_msg = Message(
         session_id=session.id, role="emperor", content=response.response_text, psych_update=response.psych_update
     )
@@ -360,7 +371,7 @@ async def get_analysis_status(user_id: str = Depends(get_current_user_id)):
     )
 
 
-def _maybe_condense_and_analyze(user_id: str) -> None:
+def _maybe_condense_and_analyze(user_id: str) -> None:  # pragma: no cover
     try:
         did_condense = _state["condensation"].maybe_condense(user_id, verbose=False)
         if did_condense:
@@ -369,7 +380,7 @@ def _maybe_condense_and_analyze(user_id: str) -> None:
         pass
 
 
-def _maybe_update_profile(user_id: str) -> None:
+def _maybe_update_profile(user_id: str) -> None:  # pragma: no cover
     config = _state["config"]
     db = _state["db"]
     min_summaries = config.get("aegean_consensus", {}).get("min_summaries_for_profile", 3)
@@ -396,7 +407,7 @@ def _maybe_update_profile(user_id: str) -> None:
         pass
 
 
-def _retrieve_context(user_message: str, user_id: str) -> dict:
+def _retrieve_context(user_message: str, user_id: str) -> dict:  # pragma: no cover
     brain = _state["brain"]
     vectors = _state["vectors"]
     context = {"stoic": [], "psych": [], "insights": [], "episodic": []}

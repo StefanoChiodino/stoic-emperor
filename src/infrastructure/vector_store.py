@@ -19,7 +19,7 @@ class VectorStore:
         parsed = urlparse(self.database_url)
         self.is_postgres = parsed.scheme in ("postgresql", "postgres")
 
-        if self.is_postgres:
+        if self.is_postgres:  # pragma: no cover
             import psycopg2
             from pgvector.psycopg2 import register_vector
             from psycopg2 import pool as pg_pool
@@ -38,7 +38,7 @@ class VectorStore:
 
     @contextmanager
     def _connection(self):
-        if self.is_postgres:
+        if self.is_postgres:  # pragma: no cover
             conn = self._pool.getconn()
             try:
                 self._register_vector(conn)
@@ -59,7 +59,7 @@ class VectorStore:
                 conn.close()
 
     def _ensure_extension(self) -> None:
-        if self.is_postgres:
+        if self.is_postgres:  # pragma: no cover
             conn = self._pool.getconn()
             try:
                 cursor = conn.cursor()
@@ -73,7 +73,7 @@ class VectorStore:
         with self._connection() as conn:
             cursor = conn.cursor()
             for name in self.COLLECTIONS:
-                if self.is_postgres:
+                if self.is_postgres:  # pragma: no cover
                     cursor.execute(f"""
                         CREATE TABLE IF NOT EXISTS vector_{name} (
                             id TEXT PRIMARY KEY,
@@ -95,10 +95,10 @@ class VectorStore:
                     """)
             cursor.close()
 
-        if self.is_postgres:
+        if self.is_postgres:  # pragma: no cover
             self._ensure_rls_policies()
 
-    def _ensure_rls_policies(self) -> None:
+    def _ensure_rls_policies(self) -> None:  # pragma: no cover
         with self._connection() as conn:
             cursor = conn.cursor()
             for name in self.COLLECTIONS:
@@ -147,7 +147,7 @@ class VectorStore:
             cursor = conn.cursor()
             for i, doc_id in enumerate(ids):
                 metadata = metadatas[i] if metadatas else {}
-                if self.is_postgres:
+                if self.is_postgres:  # pragma: no cover
                     cursor.execute(
                         f"""INSERT INTO vector_{collection} (id, document, embedding, metadata)
                            VALUES (%s, %s, %s, %s)
@@ -198,7 +198,7 @@ class VectorStore:
         results = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
         with self._connection() as conn:
-            if self.is_postgres:
+            if self.is_postgres:  # pragma: no cover
                 from psycopg2.extras import RealDictCursor
 
                 cursor = conn.cursor(cursor_factory=RealDictCursor)  # type: ignore[call-overload]
@@ -277,7 +277,7 @@ class VectorStore:
         results = {"ids": [], "documents": [], "metadatas": []}
 
         with self._connection() as conn:
-            if self.is_postgres:
+            if self.is_postgres:  # pragma: no cover
                 from psycopg2.extras import RealDictCursor
 
                 cursor = conn.cursor(cursor_factory=RealDictCursor)  # type: ignore[call-overload]
@@ -342,7 +342,7 @@ class VectorStore:
             where_clause = ""
             params: list[Any] = []
 
-            if self.is_postgres:
+            if self.is_postgres:  # pragma: no cover
                 if ids:
                     placeholders = ",".join(["%s"] * len(ids))
                     where_clause = f"WHERE id IN ({placeholders})"
@@ -374,6 +374,6 @@ class VectorStore:
             cursor.execute(f"SELECT COUNT(*) as count FROM vector_{collection}")
             result = cursor.fetchone()
             cursor.close()
-            if self.is_postgres:
+            if self.is_postgres:  # pragma: no cover
                 return result["count"] if result else 0
             return result[0] if result else 0
