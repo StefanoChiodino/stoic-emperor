@@ -19,7 +19,8 @@ def get_supabase_jwt_secret() -> str:
 def verify_supabase_token(token: str) -> dict:
     try:
         secret = get_supabase_jwt_secret()
-        payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
+        # Supabase uses HS256 by default, but allow common alternatives
+        payload = jwt.decode(token, secret, algorithms=["HS256", "HS384", "HS512"], audience="authenticated")
         return payload
     except JWTError as e:
         raise HTTPException(

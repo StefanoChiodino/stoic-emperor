@@ -427,9 +427,10 @@
                 renderSessions();
             } catch (error) {
                 console.error('Failed to load sessions:', error);
+                document.getElementById('sessions-count').textContent = 'Error loading';
                 document.getElementById('sessions-list').innerHTML = `
                     <div class="empty-state">
-                        <h3>Failed to load sessions</h3>
+                        <h3 style="color: #ff6b6b;">Failed to load sessions</h3>
                         <p>${error.message}</p>
                     </div>
                 `;
