@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Terms of Service - Stoic Emperor{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-8 space-y-8 text-gray-300">
+    <div class="border-b border-white/10 pb-6">
+        <h1 class="text-3xl font-bold text-gold-500 mb-2">Terms of Service</h1>
+        <p class="text-gray-500">Last Updated: January 2026</p>
+    </div>
+
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">1. Nature of Service</h2>
+        <p>
+            Stoic Emperor is an AI-powered chatbot designed to provide philosophical advice and conversation based on the persona of Marcus Aurelius. It utilizes a hybrid analysis architecture to simulate Stoic guidance.
+        </p>
+    </section>
+
+    <section class="space-y-4 bg-red-900/10 border-l-4 border-red-500/50 p-4 rounded-r">
+        <h2 class="text-xl font-semibold text-red-400">2. Medical Disclaimer (Critical)</h2>
+        <p>
+            <strong>This application is NOT a replacement for professional medical, psychological, or psychiatric advice, diagnosis, or treatment.</strong>
+        </p>
+        <p>
+            The "Stoic Emperor" is an artificial intelligence, not a licensed therapist or doctor. Its insights are philosophical in nature. If you are in crisis, experiencing a medical emergency, or having thoughts of self-harm, please contact emergency services (911/999) or a mental health professional immediately.
+        </p>
+    </section>
+
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">3. Privacy & Data Architecture</h2>
+        <p>
+            We adhere to a strict "Privacy First" architecture.
+        </p>
+        <ul class="list-disc pl-5 space-y-2 text-gray-400">
+            <li><strong>Private Infrastructure:</strong> Your conversation data resides in our private PostgreSQL instance.</li>
+            <li><strong>No Telemetry:</strong> We strictly disable telemetry. We do not sell or share your personal conversation data with third-party advertisers.</li>
+            <li><strong>Data Persistence:</strong> Conversations are stored to provide context for the "Emperor's" memory and consensus analysis. You may request account deletion at any time.</li>
+        </ul>
+    </section>
+
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">4. User Conduct</h2>
+        <p>
+            You agree to use this service lawfully. You will not use the bot to generate harmful, illegal, or abusive content. We reserve the right to terminate access for users who violate these standards.
+        </p>
+    </section>
+
+    <section class="space-y-4">
+        <h2 class="text-xl font-semibold text-white">5. Limitation of Liability</h2>
+        <p>
+            The service is provided "as is" without warranties of any kind. We are not liable for any actions taken based on the advice provided by the AI. Philosophical guidance is subjective; apply it at your own risk.
+        </p>
+    </section>
+</div>
+{% endblock %}
